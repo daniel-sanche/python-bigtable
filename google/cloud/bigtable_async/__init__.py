@@ -19,9 +19,4 @@ __version__ = package_version.__version__
 
 from .client import BigtableDataClient
 
-__all__ = (
-    "BigtableDataClient",
-)
-
-
-
+__all__ = ("BigtableDataClient",)

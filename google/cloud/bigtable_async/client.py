@@ -13,10 +13,11 @@
 # limitations under the License.
 #
 
-"""Client for interacting with the Google Cloud BigTable API."""""
+"""Client for interacting with the Google Cloud BigTable API.""" ""
 
 import google.api_core.client_options
 from google.cloud.client import ClientWithProject
+
 
 class BigtableDataClient(ClientWithProject):
 
