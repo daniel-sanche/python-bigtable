@@ -20,10 +20,13 @@ from google.cloud.client import ClientWithProject
 
 class BigtableDataClient(ClientWithProject):
 
+    _instance = None
+
     def __init__(
         self,
         *,
         project=None,
+        instance=None,
         credentials=None,
         _http=None,
         client_options=None,
@@ -33,6 +36,7 @@ class BigtableDataClient(ClientWithProject):
             project (Optional[str]): the project which the client acts on behalf of.
                 If not passed, falls back to the default inferred
                 from the environment.
+            instance (Optional[str]): the id of the instance to connect to
             credentials (Optional[google.auth.credentials.Credentials]):
                 Thehe OAuth2 Credentials to use for this
                 client. If not passed (and if no ``_http`` object is
@@ -55,6 +59,7 @@ class BigtableDataClient(ClientWithProject):
             _http=_http,
             client_options=client_options,
         )
+        _instance = instance
 
     def test(self):
         print("test")
