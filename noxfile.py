@@ -126,10 +126,22 @@ def format(session):
 def mypy(session):
     """Verify type hints are mypy compatible."""
     session.install("-e", ".")
-    session.install("mypy", "types-setuptools", "types-protobuf", "types-mock")
+    session.install(
+        "mypy", "types-setuptools", "types-protobuf", "types-mock", "types-requests"
+    )
     session.install("google-cloud-testutils")
     # TODO: also verify types on tests, all of google package
     session.run("mypy", "google/", "tests/")
+    # do stricter type checking on async client
+    session.run(
+        "mypy",
+        "--check-untyped-defs",
+        "--warn-unreachable",
+        "--disallow-any-generics",
+        "--exclude",
+        "google/cloud/bigtable_async/gapic",
+        "google/cloud/bigtable_async",
+    )
 
 
 @nox.session(python=DEFAULT_PYTHON_VERSION)

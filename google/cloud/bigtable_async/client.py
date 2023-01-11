@@ -15,15 +15,20 @@
 
 """Client for interacting with the Google Cloud BigTable API.""" ""
 
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Any, TYPE_CHECKING
 
-import google.api_core.client_options
 from google.cloud.client import ClientWithProject
+
+if TYPE_CHECKING:
+    # import dependencies when type checking
+    import requests
+    import google.api_core.client_options
+    import google.auth.credentials
 
 
 class BigtableDataClient(ClientWithProject):
 
-    _instance: str = None
+    _instance: Optional[str] = None
 
     def __init__(
         self,
@@ -33,7 +38,7 @@ class BigtableDataClient(ClientWithProject):
         credentials: Optional["google.auth.credentials.Credentials"] = None,
         _http: Optional["requests.Session"] = None,
         client_options: Optional[
-            Union[dict, "google.api_core.client_options.ClientOptions"]
+            Union[Dict[str, Any], "google.api_core.client_options.ClientOptions"]
         ] = None,
     ):
         """
