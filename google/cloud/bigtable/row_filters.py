@@ -16,11 +16,15 @@
 
 import struct
 
-from typing import Union, Dict, Any
+from typing import Union, Dict, Any, List, Optional, TYPE_CHECKING
 
 from google.cloud._helpers import _microseconds_from_datetime  # type: ignore
 from google.cloud._helpers import _to_bytes  # type: ignore
 from google.cloud.bigtable_v2.types import data as data_v2_pb2
+
+if TYPE_CHECKING:
+    # import dependencies when type checking
+    from datetime import datetime
 
 _PACK_I64 = struct.Struct(">q").pack
 
@@ -57,7 +61,7 @@ class _BoolFilter(RowFilter):
     :param flag: An indicator if a setting is turned on or off.
     """
 
-    def __init__(self, flag):
+    def __init__(self, flag: bool):
         self.flag = flag
 
     def __eq__(self, other):
@@ -126,8 +130,8 @@ class _RegexFilter(RowFilter):
         will be encoded as ASCII.
     """
 
-    def __init__(self, regex):
-        self.regex = _to_bytes(regex)
+    def __init__(self, regex: Union[str, bytes]):
+        self.regex: bytes = _to_bytes(regex)
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
@@ -174,8 +178,8 @@ class RowSampleFilter(RowFilter):
                    interval ``(0, 1)``  The end points are excluded).
     """
 
-    def __init__(self, sample):
-        self.sample = sample
+    def __init__(self, sample: float):
+        self.sample: float = sample
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
@@ -248,9 +252,11 @@ class TimestampRange(object):
                 range. If omitted, no upper bound is used.
     """
 
-    def __init__(self, start=None, end=None):
-        self.start = start
-        self.end = end
+    def __init__(
+        self, start: Optional["datetime"] = None, end: Optional["datetime"] = None
+    ):
+        self.start: Optional["datetime"] = start
+        self.end: Optional["datetime"] = end
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
@@ -291,7 +297,7 @@ class TimestampRangeFilter(RowFilter):
     """
 
     def __init__(self, range_: TimestampRange):
-        self.range_ = range_
+        self.range_: TimestampRange = range_
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
@@ -356,11 +362,11 @@ class ColumnRangeFilter(RowFilter):
 
     def __init__(
         self,
-        column_family_id,
-        start_column=None,
-        end_column=None,
-        inclusive_start=None,
-        inclusive_end=None,
+        column_family_id: str,
+        start_column: Optional[bytes] = None,
+        end_column: Optional[bytes] = None,
+        inclusive_start: Optional[bool] = None,
+        inclusive_end: Optional[bool] = None,
     ):
         self.column_family_id = column_family_id
 
@@ -410,7 +416,8 @@ class ColumnRangeFilter(RowFilter):
 
     def range_to_dict(self) -> Dict[str, Union[str, bytes]]:
         """Converts the column range range to a dict representation."""
-        column_range_kwargs = {"family_name": self.column_family_id}
+        column_range_kwargs: Dict[str, Union[str, bytes]] = {}
+        column_range_kwargs["family_name"] = self.column_family_id
         if self.start_column is not None:
             if self.inclusive_start:
                 key = "start_qualifier_closed"
@@ -466,7 +473,7 @@ class ExactValueFilter(ValueRegexFilter):
         equivalent bytes, or an integer (which will be packed into 8-bytes).
     """
 
-    def __init__(self, value):
+    def __init__(self, value: Union[bytes, str, int]):
         if isinstance(value, int):
             value = _PACK_I64(value)
         super(ExactValueFilter, self).__init__(value)
@@ -507,7 +514,11 @@ class ValueRangeFilter(RowFilter):
     """
 
     def __init__(
-        self, start_value=None, end_value=None, inclusive_start=None, inclusive_end=None
+        self,
+        start_value: Optional[bytes] = None,
+        end_value: Optional[bytes] = None,
+        inclusive_start: Optional[bool] = None,
+        inclusive_end: Optional[bool] = None,
     ):
         if inclusive_start is None:
             inclusive_start = True
@@ -698,10 +709,10 @@ class _FilterCombination(RowFilter):
     :param filters: List of :class:`RowFilter`
     """
 
-    def __init__(self, filters=None):
+    def __init__(self, filters: Optional[List[RowFilter]] = None):
         if filters is None:
             filters = []
-        self.filters = filters
+        self.filters: List[RowFilter] = filters
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
@@ -798,7 +809,12 @@ class ConditionalRowFilter(RowFilter):
                          will be returned in the false case.
     """
 
-    def __init__(self, base_filter, true_filter=None, false_filter=None):
+    def __init__(
+        self,
+        base_filter: RowFilter,
+        true_filter: Optional[RowFilter] = None,
+        false_filter: Optional[RowFilter] = None,
+    ):
         self.base_filter = base_filter
         self.true_filter = true_filter
         self.false_filter = false_filter
@@ -829,7 +845,7 @@ class ConditionalRowFilter(RowFilter):
         condition = data_v2_pb2.RowFilter.Condition(**condition_kwargs)
         return data_v2_pb2.RowFilter(condition=condition)
 
-    def condition_to_dict(self) -> Dict[str, Union[str, Any]]:
+    def condition_to_dict(self) -> Dict[str, Any]:
         """Converts the condition to a dict representation."""
         condition_kwargs = {"predicate_filter": self.base_filter.to_dict()}
         if self.true_filter is not None:
