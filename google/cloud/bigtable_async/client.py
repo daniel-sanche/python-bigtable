@@ -16,8 +16,10 @@
 """Client for interacting with the Google Cloud BigTable API.""" ""
 
 from typing import Optional, Union, Dict, Any, TYPE_CHECKING
+import asyncio
 
 from google.cloud.client import ClientWithProject
+from google.cloud.bigtable_v2.services.bigtable.client import BigtableClient
 
 if TYPE_CHECKING:
     # import dependencies when type checking
@@ -28,13 +30,14 @@ if TYPE_CHECKING:
 
 class BigtableDataClient(ClientWithProject):
 
-    _instance: Optional[str] = None
+    _instance: str
+    _gapic_client: BigtableClient
 
     def __init__(
         self,
+        instance: str,
         *,
         project: Optional[str] = None,
-        instance: Optional[str] = None,
         credentials: Optional["google.auth.credentials.Credentials"] = None,
         _http: Optional["requests.Session"] = None,
         client_options: Optional[
@@ -43,10 +46,10 @@ class BigtableDataClient(ClientWithProject):
     ):
         """
         Args:
+            instance (str): the id of the instance to connect to
             project (Optional[str]): the project which the client acts on behalf of.
                 If not passed, falls back to the default inferred
                 from the environment.
-            instance (Optional[str]): the id of the instance to connect to
             credentials (Optional[google.auth.credentials.Credentials]):
                 Thehe OAuth2 Credentials to use for this
                 client. If not passed (and if no ``_http`` object is
@@ -69,7 +72,19 @@ class BigtableDataClient(ClientWithProject):
             _http=_http,
             client_options=client_options,
         )
-        _instance = instance
+        self._instance = instance
+        self._gapic_client = BigtableClient(credentials=credentials, client_options=client_options)
 
     def test(self):
         print("test")
+
+    def read_rows(self, table_id:str, row_key:Optional[str]=None, filter:Optional[str]=None):
+        table_name = f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
+        print(f"CONNECTING TO TABLE: {table_name}")
+        request = {"table_name": table_name}
+        results = list(self._gapic_client.read_rows(request=request))
+        parsed_response = []
+        for r in results:
+            for c in r.chunks:
+                parsed_response.append((c.row_key.decode('utf-8'), c.value.decode('utf-8')))
+        return parsed_response
