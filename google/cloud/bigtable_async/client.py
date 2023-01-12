@@ -23,6 +23,8 @@ from google.cloud.client import ClientWithProject
 from google.cloud.bigtable_v2.services.bigtable.async_client import BigtableAsyncClient
 from google.cloud.bigtable.row_filters import RowFilter
 from google.cloud.bigtable.row_set import RowRange, RowSet
+from google.cloud.bigtable.row import Row
+from .row_merger import RowMerger
 
 if TYPE_CHECKING:
     # import dependencies when type checking
@@ -32,9 +34,6 @@ if TYPE_CHECKING:
 
 
 class BigtableDataClient(ClientWithProject):
-
-    _instance: str
-    _gapic_client: BigtableAsyncClient
 
     def __init__(
         self,
@@ -88,7 +87,7 @@ class BigtableDataClient(ClientWithProject):
     def test(self):
         print("test")
 
-    def read_rows(self, table_id:str, **kwargs) -> List[Tuple[str,str]]:
+    def read_rows(self, table_id:str, **kwargs) -> List[Row]:
         """
         Synchronously returns a list of data obtained from a row query
         """
@@ -96,7 +95,7 @@ class BigtableDataClient(ClientWithProject):
         result = loop.run_until_complete(self.read_rows_async(table_id, **kwargs))
         return result
 
-    async def read_rows_async(self, table_id:str, **kwargs) -> List[Tuple[str,str]]:
+    async def read_rows_async(self, table_id:str, **kwargs) -> List[Row]:
         """
         Returns a list of data obtained from a row query
         """
@@ -112,10 +111,11 @@ class BigtableDataClient(ClientWithProject):
         row_keys: Optional[List[str]] = None,
         row_ranges: Optional[List[RowRange]] = None,
         row_filter: Optional[RowFilter] = None,
-    ) -> AsyncIterable[Tuple[str,str]]:
+    ) -> AsyncIterable[Row]:
         """
         Returns a generator to asynchronously stream back row data
         """
+        merger = RowMerger()
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
         )
@@ -135,5 +135,10 @@ class BigtableDataClient(ClientWithProject):
                 "row_ranges": [r.get_range_kwargs for r in row_set.row_ranges],
             }
         async for result in await self._gapic_client.read_rows(request=request):
-            for c in result.chunks:
-                yield (c.row_key.decode("utf-8"), c.value.decode("utf-8"))
+            if merger.has_full_frame():
+                row = merger.pop()
+                yield row
+            else:
+                merger.push(result)
+            if merger.has_partial_frame():
+                raise RuntimeError("Incomplete stream")

@@ -17,6 +17,7 @@ from google.cloud.bigtable import gapic_version as package_version
 
 __version__ = package_version.__version__
 
-from .client import BigtableDataClient
+from google.cloud.bigtable_async.client import BigtableDataClient
+from google.cloud.bigtable_async.row_merger import RowMerger
 
-__all__ = ("BigtableDataClient",)
+__all__ = ("BigtableDataClient", "RowMerger")
