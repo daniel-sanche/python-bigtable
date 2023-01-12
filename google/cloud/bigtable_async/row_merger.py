@@ -15,21 +15,65 @@
 
 from google.cloud.bigtable_v2.types.bigtable import ReadRowsResponse
 from google.cloud.bigtable.row import Row
+from collections import deque
+
+from typing import Deque
 
 # java implementation: 
 # https://github.com/googleapis/java-bigtable/blob/8b120de58f0dfba3573ab696fb0e5375e917a00e/google-cloud-bigtable/src/main/java/com/google/cloud/bigtable/data/v2/stub/readrows/RowMerger.java
 
 class RowMerger():
+
+    def __init__(self):
+        self.merged_rows:Deque[Row] = deque([])
+        self.state_machine = StateMachine()
+
     def push(self, new_data:ReadRowsResponse):
-        raise NotImplementedError
+        last_scanned = new_data.last_scanned_row_key
+        # if the server sends a scan heartbeat, notify the state machine.
+        if last_scanned is not None:
+            self.state_machine.handle_last_scanned_row(last_scanned)
+            if self.state_machine.has_complete_row():
+                self.merged_rows.append(self.state_machine.consume_row())
+        # process new chunks through the state machine.
+        for chunk in new_data.chunks:
+            self.state_machine.handle_chunk(chunk)
+            if self.state_machine.has_complete_row():
+                self.merged_rows.append(self.state_machine.consume_row())
 
     def has_full_frame(self) -> bool:
-        raise NotImplementedError
+        """
+        one or more rows are ready and waiting to be consumed
+        """
+        return not self.merged_rows
 
     def has_partial_frame(self) -> bool:
-        raise NotImplementedError
+        """
+        Returns true if the merger still has ongoing state
+        By the end of the process, there should be no partial state
+        """
+        return self.has_full_frame() or self.state_machine.is_row_in_progress()
 
     def pop(self) -> Row:
-        raise NotImplementedError
+        """
+        Return a row out of the cache of waiting rows
+        """
+        return self.merged_rows.popleft()
 
 
+class StateMachine():
+
+    def handle_last_scanned_row(self, last_scanned_row_key:bytes):
+        pass
+
+    def handle_chunk(self, chunk:ReadRowsResponse.CellChunk):
+        pass
+
+    def has_complete_row(self) -> bool:
+        return False
+
+    def consume_row(self) -> Row:
+        pass
+
+    def is_row_in_progress(self) -> bool:
+        return True
