@@ -15,11 +15,12 @@
 
 """Client for interacting with the Google Cloud BigTable API.""" ""
 
-from typing import Optional, Union, Dict, Any, TYPE_CHECKING
-import asyncio
+from typing import Optional, Union, Dict, List, Tuple, Any, TYPE_CHECKING
 
 from google.cloud.client import ClientWithProject
 from google.cloud.bigtable_v2.services.bigtable.client import BigtableClient
+from google.cloud.bigtable.row_filters import RowFilter
+from google.cloud.bigtable.row_set import RowRange, RowSet
 
 if TYPE_CHECKING:
     # import dependencies when type checking
@@ -73,18 +74,44 @@ class BigtableDataClient(ClientWithProject):
             client_options=client_options,
         )
         self._instance = instance
-        self._gapic_client = BigtableClient(credentials=credentials, client_options=client_options)
+        self._gapic_client = BigtableClient(
+            credentials=credentials, client_options=client_options
+        )
 
     def test(self):
         print("test")
 
-    def read_rows(self, table_id:str, row_key:Optional[str]=None, filter:Optional[str]=None):
-        table_name = f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
+    def read_rows(
+        self,
+        table_id: str,
+        row_set: Optional[RowSet] = None,
+        row_keys: Optional[List[str]] = None,
+        row_ranges: Optional[List[RowRange]] = None,
+        row_filter: Optional[RowFilter] = None,
+    ) -> List[Tuple[str, str]]:
+        table_name = (
+            f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
+        )
         print(f"CONNECTING TO TABLE: {table_name}")
-        request = {"table_name": table_name}
+        request: Dict[str, Any] = {"table_name": table_name}
+        if row_filter:
+            request["filter"] = row_filter.to_dict()
+        if row_set is not None or row_keys is not None or row_ranges is not None:
+            if row_set is None:
+                row_set = RowSet()
+            if row_keys is not None:
+                row_set.row_keys.extend(row_keys)
+            if row_ranges is not None:
+                row_set.row_ranges.extend(row_ranges)
+            request["rows"] = {
+                "row_keys": [s.encode() for s in row_set.row_keys],
+                "row_ranges": [r.get_range_kwargs for r in row_set.row_ranges],
+            }
         results = list(self._gapic_client.read_rows(request=request))
         parsed_response = []
         for r in results:
             for c in r.chunks:
-                parsed_response.append((c.row_key.decode('utf-8'), c.value.decode('utf-8')))
+                parsed_response.append(
+                    (c.row_key.decode("utf-8"), c.value.decode("utf-8"))
+                )
         return parsed_response
