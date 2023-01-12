@@ -17,7 +17,7 @@
 
 import asyncio
 
-from typing import Optional, Union, Dict, List, Tuple, Any, AsyncIterable, Awaitable, TYPE_CHECKING
+from typing import cast, Optional, Union, Dict, List, Tuple, Any, AsyncIterable, Awaitable, TYPE_CHECKING
 
 from google.cloud.client import ClientWithProject
 from google.cloud.bigtable_v2.services.bigtable.async_client import BigtableAsyncClient
@@ -75,6 +75,11 @@ class BigtableDataClient(ClientWithProject):
             _http=_http,
             client_options=client_options,
         )
+        if type(client_options) is dict:
+            client_options = google.api_core.client_options.from_dict(
+                client_options
+            )
+        client_options = cast(Optional["google.api_core.client_options.ClientOptions"], client_options)
         self._instance = instance
         self._gapic_client = BigtableAsyncClient(
             credentials=credentials, client_options=client_options
@@ -83,20 +88,24 @@ class BigtableDataClient(ClientWithProject):
     def test(self):
         print("test")
 
-    def read_rows(self, table_id:str, **kwargs) -> List[Tuple[str, str]]:
+    def read_rows(self, table_id:str, **kwargs) -> List[Tuple[str,str]]:
+        """
+        Synchronously returns a list of data obtained from a row query
+        """
         loop = asyncio.get_event_loop()
-        # result = loop.run_until_complete(self.runner(table_id, **kwargs))
-        result = loop.run_until_complete(self._runner(table_id, **kwargs))
+        result = loop.run_until_complete(self.read_rows_async(table_id, **kwargs))
         return result
 
-    async def _runner(self, table_id, **kwargs):
+    async def read_rows_async(self, table_id:str, **kwargs) -> List[Tuple[str,str]]:
+        """
+        Returns a list of data obtained from a row query
+        """
         result_list = []
-        async for result in self.read_rows_async(table_id, **kwargs):
-            print(result)
+        async for result in self.read_rows_stream(table_id, **kwargs):
             result_list.append(result)
         return result_list
 
-    async def read_rows_async(
+    async def read_rows_stream(
         self,
         table_id: str,
         row_set: Optional[RowSet] = None,
@@ -104,6 +113,9 @@ class BigtableDataClient(ClientWithProject):
         row_ranges: Optional[List[RowRange]] = None,
         row_filter: Optional[RowFilter] = None,
     ) -> AsyncIterable[Tuple[str,str]]:
+        """
+        Returns a generator to asynchronously stream back row data
+        """
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
         )
