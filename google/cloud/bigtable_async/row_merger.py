@@ -75,16 +75,17 @@ class StateMachine():
 
     def reset(self):
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        self.current_state:Optional[str] = AWAITING_NEW_ROW()
-        self.row_key:Optional[str] = None
-        self.family_name:Optional[str] = None
-        self.qualifier:Optional[str] = None
-        self.timestamp:int = 0
-        self.labels:List[str] = None
-        self.expected_cell_size:int = 0
-        self.remaining_cell_bytes:int = 0
+        self.current_state:Optional[str] = AWAITING_NEW_ROW(self)
+        # self.last_complete_row_key:Optional[bytes] = None
+        # self.row_key:Optional[bytes] = None
+        # self.family_name:Optional[str] = None
+        # self.qualifier:Optional[str] = None
+        # self.timestamp:int = 0
+        # self.labels:List[str] = None
+        # self.expected_cell_size:int = 0
+        # self.remaining_cell_bytes:int = 0
         self.complete_row:Optional[Row] = None
-        self.num_cells_in_row:int = 0
+        # self.num_cells_in_row:int = 0
         self.adapter.reset()
 
     def handle_last_scanned_row(self, last_scanned_row_key:bytes):
@@ -93,7 +94,7 @@ class StateMachine():
 
     def handle_chunk(self, chunk:ReadRowsResponse.CellChunk):
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        pass
+        self.current_state = self.current_state.handle_chunk(chunk);
 
     def has_complete_row(self) -> bool:
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
@@ -104,10 +105,9 @@ class StateMachine():
         Returns the last completed row and transitions to a new row
         """
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        if not self.has_complete_row():
+        if not self.has_complete_row() or self.complete_row is None:
             raise RuntimeError("No row to consume")
         row = self.complete_row
-        assert row is not None
         self.reset()
         return row
 
@@ -115,9 +115,29 @@ class StateMachine():
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
         return isinstance(self.current_state, AWAITING_NEW_ROW)
 
+    def handle_commit_row() -> "State":
+        """
+        Called when a row is complete.
+        Wait in AWAITING_ROW_CONSUME state for the RowMerger to consume it
+        """
+        self.complete_row = self.adapter.finish_row()
+        # self.last_complete_row_key = self.complete_row.key
+        return AWAITING_ROW_CONSUME(self)
 
+
+    def handle_reset_chunk(chunk:ReadRowsResponse.CellChunk) -> "AWAITING_NEW_ROW":
+        """
+        When a reset chunk comes in, drop all buffers and reset to AWAITING_NEW_ROW state
+        """
+        self.reset()
+        assert isinstance(self.current_state, AWAITING_NEW_ROW)
+        return self.current_state
 
 class State:
+
+    def __init__(self, owner:"StateMachine"):
+        self._owner = state_machine
+
     def handle_last_scanned_row(self, last_scanned_row_key:bytes) -> "State":
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
         raise NotImplementedError
@@ -133,7 +153,14 @@ class AWAITING_NEW_ROW(State):
 
     Exit states: any (depending on chunk)
     """
-    pass
+
+    def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "State":
+        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
+        breakpoint()
+        self._owner.adapter.start_row(chunk.row_key)
+        # the first chunk signals both the start of a new row and the start of a new cell, so
+        # force the chunk processing in the AWAITING_CELL_VALUE.
+        return AWAITING_NEW_CELL(self._owner).handle_chunk()
 
 class AWAITING_NEW_CELL(State):
     """
@@ -141,23 +168,60 @@ class AWAITING_NEW_CELL(State):
 
     Exit states: any (depending on chunk)
     """
-    pass
+
+    def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "State":
+        if chunk.reset_row:
+            return self._owner.handle_reset_chunk(chunk)
+        chunk_size = len(chunk.value)
+        is_split = chunk.value_size > 0
+        expected_cell_size = chunk.value_size if is_split else chunk_size
+        self._owner.adapter.start_cell(chunk.family_name, chunk.qualifier, chunk.timestamp_micros, expected_cell_size)
+        self._owner.adapter.cell_value(chunk.value)
+        # transition to new state
+        if is_split:
+            return AWAITING_CELL_VALUE(self._owner)
+        else:
+            # cell is complete
+            self._owner.adapter.finish_cell()
+            if chunk.commit_row:
+                # row is also complete
+                handle_commit_row()
+            else:
+                # wait for more cells for this row
+                return AWAITING_NEW_CELL(self._owner)
 
 class AWAITING_CELL_VALUE(State):
     """
-    State that represents a cell's continuation
+    State that represents a split cell's continuation
 
     Exit states: any (depending on chunk)
     """
-    pass
+    def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "State":
+        if chunk.reset_row:
+            return self._owner.handle_reset_chunk(chunk)
+        is_last = chunk.value_size == 0
+        self._owner.adapter.cell_value(chunk.value)
+        # transition to new state
+        if not is_last:
+            return AWAITING_CELL_VALUE(self._owner)
+        else:
+            # cell is complete
+            self._owner.adapter.finish_cell()
+            if chunk.commit_row:
+                # row is also complete
+                handle_commit_row()
+            else:
+                # wait for more cells for this row
+                return AWAITING_NEW_CELL(self._owner)
 
 class AWAITING_ROW_CONSUME(State):
     """
-    Represents a completed row. Prevents new eos being read until it is consumed
+    Represents a completed row. Prevents new rows being read until it is consumed
 
     Exit states: AWAITING_NEW_ROW
     """
-    pass
+    def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "State":
+        raise RuntimeError("Skipping completed row")
 
 class RowBuilder():
     """
