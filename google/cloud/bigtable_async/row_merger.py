@@ -69,16 +69,23 @@ class RowMerger():
 
 class StateMachine():
 
-    current_state:Optional[str] = "AWAITING_NEW_ROW"
-    row_key:Optional[str] = None
-    family_name:Optional[str] = None
-    qualifier:Optional[str] = None
-    timestamp:int = 0
-    labels:List[str] = None
-    expected_cell_size:int = 0
-    remaining_cell_bytes:int = 0
-    complete_row:Optional[Row] = None
-    num_cells_in_row:int = 0
+    def __init__(self):
+        self.adapter:"RowBuilder" = RowBuilder()
+        self.reset()
+
+    def reset(self):
+        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
+        self.current_state:Optional[str] = AWAITING_NEW_ROW()
+        self.row_key:Optional[str] = None
+        self.family_name:Optional[str] = None
+        self.qualifier:Optional[str] = None
+        self.timestamp:int = 0
+        self.labels:List[str] = None
+        self.expected_cell_size:int = 0
+        self.remaining_cell_bytes:int = 0
+        self.complete_row:Optional[Row] = None
+        self.num_cells_in_row:int = 0
+        self.adapter.reset()
 
     def handle_last_scanned_row(self, last_scanned_row_key:bytes):
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
@@ -90,31 +97,25 @@ class StateMachine():
 
     def has_complete_row(self) -> bool:
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        return True
+        return isinstance(self.current_state, AWAITING_ROW_CONSUME) and self.complete_row is not None
 
     def consume_row(self) -> Row:
         """
         Returns the last completed row and transitions to a new row
         """
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        return Row(b"")
+        if not self.has_complete_row():
+            raise RuntimeError("No row to consume")
+        row = self.complete_row
+        assert row is not None
+        self.reset()
+        return row
 
     def is_row_in_progress(self) -> bool:
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        return True
+        return isinstance(self.current_state, AWAITING_NEW_ROW)
 
-    def reset(self):
-        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        self.current_state = "AWAITING_NEW_ROW"
-        self.row_key = None
-        self.family_name = None
-        self.qualifier = None
-        self.timestamp = 0
-        self.labels = None
-        self.expected_cell_size = 0
-        self.remaining_cell_bytes = 0
-        self.complete_row = None
-        self.num_cells_in_row = 0
+
 
 class State:
     def handle_last_scanned_row(self, last_scanned_row_key:bytes) -> "State":
