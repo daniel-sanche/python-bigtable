@@ -143,3 +143,52 @@ class AWAITING_ROW_CONSUME(State):
     Exit states: AWAITING_NEW_ROW
     """
     pass
+
+class RowBuilder():
+    """
+    called by state machine to build rows
+
+    State machine makes the following guarantees:
+        Exactly 1 `start_row` for each row.
+        Exactly 1 `start_cell` for each cell.
+        At least 1 `cell_value` for each cell.
+        Exactly 1 `finish_cell` for each cell.
+        Exactly 1 `finish_row` for each row.
+   `create_scan_marker_row` can be called one or more times between `finish_row` and
+   `start_row`. `reset` can be called at any point and can be invoked multiple times in
+   a row.
+    """
+   def start_row(self, key:bytes) -> None:
+       """Called to start a new row. This will be called once per row"""
+       print("start row")
+       return
+
+    def start_cell(self, family:str, qualifier:bytes, timestamp:int,labels:List[str], size:int) -> None:
+        """called to start a new cell in a row."""
+        print("start cell")
+        return
+
+    def cell_value(self, value:bytes) -> None:
+        """called multiple times per cell to concatenate the cell value"""
+        print("cell value")
+        return
+
+    def finish_cell(self) -> None:
+        """called once per cell to signal the end of the value (unless reset)"""
+        print("finish cell")
+        return
+
+    def finish_row(self) -> Row:
+        """called once per row to signal that all cells have been processed (unless reset)"""
+        print("finish row")
+        return Row()
+
+    def reset(self) -> None:
+        """called when the current in progress row should be dropped"""
+        print("reset")
+        return
+
+    def create_scan_marker_row(self, key:bytes) -> Row:
+        """creates a special row to mark server progress before any data is received"""
+        print("create scan marker row")
+        return Row()
