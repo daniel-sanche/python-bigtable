@@ -17,7 +17,7 @@ from google.cloud.bigtable_v2.types.bigtable import ReadRowsResponse
 from google.cloud.bigtable.row import Row
 from collections import deque
 
-from typing import Deque
+from typing import Deque, Optional, List
 
 # java implementation: 
 # https://github.com/googleapis/java-bigtable/blob/8b120de58f0dfba3573ab696fb0e5375e917a00e/google-cloud-bigtable/src/main/java/com/google/cloud/bigtable/data/v2/stub/readrows/RowMerger.java
@@ -45,7 +45,7 @@ class RowMerger():
         """
         one or more rows are ready and waiting to be consumed
         """
-        return not self.merged_rows
+        return self.merged_rows
 
     def has_partial_frame(self) -> bool:
         """
@@ -81,13 +81,13 @@ class StateMachine():
         pass
 
     def has_complete_row(self) -> bool:
-        return False
+        return True
 
     def consume_row(self) -> Row:
         """
         Returns the last completed row and transitions to a new row
         """
-        pass
+        return Row(b"")
 
     def is_row_in_progress(self) -> bool:
         return True
@@ -104,11 +104,11 @@ class StateMachine():
         self.complete_row = None
         self.num_cells_in_row = 0
 
-class State():
-    def handle_last_scanned_row(self, last_scanned_row_key:bytes) -> State:
+class State:
+    def handle_last_scanned_row(self, last_scanned_row_key:bytes) -> "State":
         raise NotImplementedError
 
-    def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> State:
+    def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "State":
         raise NotImplementedError
 
 class AWAITING_NEW_ROW(State):
@@ -154,11 +154,11 @@ class RowBuilder():
         At least 1 `cell_value` for each cell.
         Exactly 1 `finish_cell` for each cell.
         Exactly 1 `finish_row` for each row.
-   `create_scan_marker_row` can be called one or more times between `finish_row` and
-   `start_row`. `reset` can be called at any point and can be invoked multiple times in
-   a row.
+    `create_scan_marker_row` can be called one or more times between `finish_row` and
+    `start_row`. `reset` can be called at any point and can be invoked multiple times in
+    a row.
     """
-   def start_row(self, key:bytes) -> None:
+    def start_row(self, key:bytes) -> None:
        """Called to start a new row. This will be called once per row"""
        print("start row")
        return
@@ -181,7 +181,7 @@ class RowBuilder():
     def finish_row(self) -> Row:
         """called once per row to signal that all cells have been processed (unless reset)"""
         print("finish row")
-        return Row()
+        return Row(b"")
 
     def reset(self) -> None:
         """called when the current in progress row should be dropped"""
@@ -191,4 +191,4 @@ class RowBuilder():
     def create_scan_marker_row(self, key:bytes) -> Row:
         """creates a special row to mark server progress before any data is received"""
         print("create scan marker row")
-        return Row()
+        return Row(key)

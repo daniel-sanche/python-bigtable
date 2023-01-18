@@ -24,7 +24,8 @@ from google.cloud.bigtable_v2.services.bigtable.async_client import BigtableAsyn
 from google.cloud.bigtable.row_filters import RowFilter
 from google.cloud.bigtable.row_set import RowRange, RowSet
 from google.cloud.bigtable.row import Row
-from .row_merger import RowMerger
+
+from google.cloud.bigtable_async.row_merger import RowMerger
 
 if TYPE_CHECKING:
     # import dependencies when type checking
@@ -140,5 +141,6 @@ class BigtableDataClient(ClientWithProject):
                 yield row
             else:
                 merger.push(result)
-            if merger.has_partial_frame():
-                raise RuntimeError("Incomplete stream")
+        # if merger.has_partial_frame():
+            # read rows is complete, but there's still data in the merger
+            # raise RuntimeError("Incomplete stream")
