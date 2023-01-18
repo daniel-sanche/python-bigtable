@@ -142,6 +142,11 @@ class BigtableDataClient(ClientWithProject):
                 yield row
             else:
                 merger.push(result)
+        # flush remaining rows
+        if merger.has_full_frame():
+            row = merger.pop()
+            print(f"YIELDING: {row}")
+            yield row
         # if merger.has_partial_frame():
             # read rows is complete, but there's still data in the merger
             # raise RuntimeError("Incomplete stream")

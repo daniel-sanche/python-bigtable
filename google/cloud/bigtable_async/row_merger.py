@@ -34,7 +34,7 @@ class RowMerger():
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
         last_scanned = new_data.last_scanned_row_key
         # if the server sends a scan heartbeat, notify the state machine.
-        if last_scanned is not None:
+        if last_scanned:
             self.state_machine.handle_last_scanned_row(last_scanned)
             if self.state_machine.has_complete_row():
                 self.merged_rows.append(self.state_machine.consume_row())
