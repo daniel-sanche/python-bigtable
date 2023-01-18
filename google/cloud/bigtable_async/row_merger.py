@@ -63,6 +63,17 @@ class RowMerger():
 
 class StateMachine():
 
+    current_state:Optional[str] = "AWAITING_NEW_ROW"
+    row_key:Optional[str] = None
+    family_name:Optional[str] = None
+    qualifier:Optional[str] = None
+    timestamp:int = 0
+    labels:List[str] = None
+    expected_cell_size:int = 0
+    remaining_cell_bytes:int = 0
+    complete_row:Optional[Row] = None
+    num_cells_in_row:int = 0
+
     def handle_last_scanned_row(self, last_scanned_row_key:bytes):
         pass
 
@@ -73,7 +84,62 @@ class StateMachine():
         return False
 
     def consume_row(self) -> Row:
+        """
+        Returns the last completed row and transitions to a new row
+        """
         pass
 
     def is_row_in_progress(self) -> bool:
         return True
+
+    def reset(self):
+        self.current_state = "AWAITING_NEW_ROW"
+        self.row_key = None
+        self.family_name = None
+        self.qualifier = None
+        self.timestamp = 0
+        self.labels = None
+        self.expected_cell_size = 0
+        self.remaining_cell_bytes = 0
+        self.complete_row = None
+        self.num_cells_in_row = 0
+
+class State():
+    def handle_last_scanned_row(self, last_scanned_row_key:bytes) -> State:
+        raise NotImplementedError
+
+    def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> State:
+        raise NotImplementedError
+
+class AWAITING_NEW_ROW(State):
+    """
+    Default state
+    Awaiting a chunk to start a new row
+
+    Exit states: any (depending on chunk)
+    """
+    pass
+
+class AWAITING_NEW_CELL(State):
+    """
+    Represents a cell boundary witin a row
+
+    Exit states: any (depending on chunk)
+    """
+    pass
+
+class AWAITING_CELL_VALUE(State):
+    """
+    State that represents a cell's continuation
+
+    Exit states: any (depending on chunk)
+    """
+    pass
+
+class AWAITING_ROW_CONSUME(State):
+    """
+    Represents a completed row. Prevents new eos being read until it is consumed
+
+    Exit states: AWAITING_NEW_ROW
+    """
+    pass
