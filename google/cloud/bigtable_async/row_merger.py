@@ -195,7 +195,7 @@ class AWAITING_NEW_CELL(State):
             self._owner.adapter.finish_cell()
             if chunk.commit_row:
                 # row is also complete
-                self._owner.handle_commit_row()
+                return self._owner.handle_commit_row()
             else:
                 # wait for more cells for this row
                 return AWAITING_NEW_CELL(self._owner)
@@ -219,7 +219,7 @@ class AWAITING_CELL_VALUE(State):
             self._owner.adapter.finish_cell()
             if chunk.commit_row:
                 # row is also complete
-                self._owner.handle_commit_row()
+                return self._owner.handle_commit_row()
             else:
                 # wait for more cells for this row
                 return AWAITING_NEW_CELL(self._owner)
