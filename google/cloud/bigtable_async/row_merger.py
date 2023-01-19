@@ -18,7 +18,7 @@ from google.cloud.bigtable.row import Row, DirectRow
 from collections import deque, namedtuple
 from datetime import datetime
 
-from typing import Deque, Optional, List
+from typing import Deque, Optional, List, Dict, Any
 
 import inspect
 # java implementation: 
@@ -77,6 +77,7 @@ class StateMachine():
     def reset(self):
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
         self.current_state:Optional[str] = AWAITING_NEW_ROW(self)
+        self.last_cell_data:Dict[str, Any] = {}
         # self.last_complete_row_key:Optional[bytes] = None
         # self.row_key:Optional[bytes] = None
         # self.family_name:Optional[str] = None
@@ -175,7 +176,16 @@ class AWAITING_NEW_CELL(State):
         chunk_size = len(chunk.value)
         is_split = chunk.value_size > 0
         expected_cell_size = chunk.value_size if is_split else chunk_size
-        self._owner.adapter.start_cell(chunk.family_name, chunk.qualifier, chunk.timestamp_micros, chunk.labels, expected_cell_size)
+
+        # track latest cell data. New chunks won't send repeated data
+        if chunk.family_name:
+            self._owner.last_cell_data["family"] = chunk.family_name
+        if chunk.qualifier:
+            self._owner.last_cell_data["qualifier"] = chunk.qualifier
+        self._owner.last_cell_data["labels"] = chunk.labels
+        self._owner.last_cell_data["timestamp"] = chunk.timestamp_micros
+
+        self._owner.adapter.start_cell(**self._owner.last_cell_data, size=expected_cell_size)
         self._owner.adapter.cell_value(chunk.value)
         # transition to new state
         if is_split:
