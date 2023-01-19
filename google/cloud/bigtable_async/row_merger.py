@@ -84,7 +84,7 @@ class StateMachine():
         self.adapter.reset()
 
     def handle_last_scanned_row(self, last_scanned_row_key:bytes):
-        pass
+        self.current_state = self.current_state.handle_last_scanned_row(last_scanned_row_key)
 
     def handle_chunk(self, chunk:ReadRowsResponse.CellChunk):
         self.current_state = self.current_state.handle_chunk(chunk);
@@ -141,6 +141,10 @@ class AWAITING_NEW_ROW(State):
 
     Exit states: any (depending on chunk)
     """
+
+    def handle_last_scanned_row(self, last_scanned_row_key:bytes) -> "State":
+        self._owner.complete_row = self._owner.adapter.create_scan_marker_row(last_complete_row_key)
+        return AWAITING_ROW_CONSUME(self._owner)
 
     def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "State":
         self._owner.adapter.start_row(chunk.row_key)
