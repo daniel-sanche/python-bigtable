@@ -14,8 +14,9 @@
 #
 
 from google.cloud.bigtable_v2.types.bigtable import ReadRowsResponse
-from google.cloud.bigtable.row import Row
-from collections import deque
+from google.cloud.bigtable.row import Row, DirectRow
+from collections import deque, namedtuple
+from datetime import datetime
 
 from typing import Deque, Optional, List
 
@@ -115,7 +116,7 @@ class StateMachine():
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
         return isinstance(self.current_state, AWAITING_NEW_ROW)
 
-    def handle_commit_row() -> "State":
+    def handle_commit_row(self) -> "State":
         """
         Called when a row is complete.
         Wait in AWAITING_ROW_CONSUME state for the RowMerger to consume it
@@ -125,7 +126,7 @@ class StateMachine():
         return AWAITING_ROW_CONSUME(self)
 
 
-    def handle_reset_chunk(chunk:ReadRowsResponse.CellChunk) -> "AWAITING_NEW_ROW":
+    def handle_reset_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "AWAITING_NEW_ROW":
         """
         When a reset chunk comes in, drop all buffers and reset to AWAITING_NEW_ROW state
         """
@@ -136,7 +137,7 @@ class StateMachine():
 class State:
 
     def __init__(self, owner:"StateMachine"):
-        self._owner = state_machine
+        self._owner = owner
 
     def handle_last_scanned_row(self, last_scanned_row_key:bytes) -> "State":
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
@@ -156,11 +157,10 @@ class AWAITING_NEW_ROW(State):
 
     def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "State":
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        breakpoint()
         self._owner.adapter.start_row(chunk.row_key)
         # the first chunk signals both the start of a new row and the start of a new cell, so
         # force the chunk processing in the AWAITING_CELL_VALUE.
-        return AWAITING_NEW_CELL(self._owner).handle_chunk()
+        return AWAITING_NEW_CELL(self._owner).handle_chunk(chunk)
 
 class AWAITING_NEW_CELL(State):
     """
@@ -175,7 +175,7 @@ class AWAITING_NEW_CELL(State):
         chunk_size = len(chunk.value)
         is_split = chunk.value_size > 0
         expected_cell_size = chunk.value_size if is_split else chunk_size
-        self._owner.adapter.start_cell(chunk.family_name, chunk.qualifier, chunk.timestamp_micros, expected_cell_size)
+        self._owner.adapter.start_cell(chunk.family_name, chunk.qualifier, chunk.timestamp_micros, chunk.labels, expected_cell_size)
         self._owner.adapter.cell_value(chunk.value)
         # transition to new state
         if is_split:
@@ -185,7 +185,7 @@ class AWAITING_NEW_CELL(State):
             self._owner.adapter.finish_cell()
             if chunk.commit_row:
                 # row is also complete
-                handle_commit_row()
+                self._owner.handle_commit_row()
             else:
                 # wait for more cells for this row
                 return AWAITING_NEW_CELL(self._owner)
@@ -209,7 +209,7 @@ class AWAITING_CELL_VALUE(State):
             self._owner.adapter.finish_cell()
             if chunk.commit_row:
                 # row is also complete
-                handle_commit_row()
+                self._owner.handle_commit_row()
             else:
                 # wait for more cells for this row
                 return AWAITING_NEW_CELL(self._owner)
@@ -222,6 +222,8 @@ class AWAITING_ROW_CONSUME(State):
     """
     def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "State":
         raise RuntimeError("Skipping completed row")
+
+CellData = namedtuple('CellData', ['family', 'qualifier', 'timestamp', 'labels', 'value'])
 
 class RowBuilder():
     """
@@ -237,37 +239,54 @@ class RowBuilder():
     `start_row`. `reset` can be called at any point and can be invoked multiple times in
     a row.
     """
-    def start_row(self, key:bytes) -> None:
-       """Called to start a new row. This will be called once per row"""
-       print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-       return
 
-    def start_cell(self, family:str, qualifier:bytes, timestamp:int,labels:List[str], size:int) -> None:
-        """called to start a new cell in a row."""
-        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        return
-
-    def cell_value(self, value:bytes) -> None:
-        """called multiple times per cell to concatenate the cell value"""
-        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        return
-
-    def finish_cell(self) -> None:
-        """called once per cell to signal the end of the value (unless reset)"""
-        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        return
-
-    def finish_row(self) -> Row:
-        """called once per row to signal that all cells have been processed (unless reset)"""
-        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        return Row(b"")
+    def __init__(self):
+        self.reset()
 
     def reset(self) -> None:
         """called when the current in progress row should be dropped"""
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        return
+        self.current_key:Optional[bytes] = None
+        self.working_cell:Optional[CellData] = None
+        self.previous_cells:List[CellData] = []
 
     def create_scan_marker_row(self, key:bytes) -> Row:
         """creates a special row to mark server progress before any data is received"""
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
         return Row(key)
+
+    def start_row(self, key:bytes) -> None:
+        """Called to start a new row. This will be called once per row"""
+        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
+        self.current_key = key
+
+    def start_cell(self, family:str, qualifier:bytes, timestamp:int,labels:List[str], size:int) -> None:
+        """called to start a new cell in a row."""
+        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
+        self.working_cell = CellData(family, qualifier, timestamp, labels, bytearray())
+
+    def cell_value(self, value:bytes) -> None:
+        """called multiple times per cell to concatenate the cell value"""
+        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
+        self.working_cell.value.extend(value)
+
+    def finish_cell(self) -> None:
+        """called once per cell to signal the end of the value (unless reset)"""
+        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
+        self.previous_cells.append(self.working_cell)
+        self.working_cell = None
+
+    def finish_row(self) -> Row:
+        """called once per row to signal that all cells have been processed (unless reset)"""
+        print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
+        new_row = DirectRow(b"")
+        for cell in self.previous_cells:
+            # TODO: handle timezones?
+            # should probably make a new row class
+            timestamp = datetime.fromtimestamp(cell.timestamp/1e6)
+            print(cell)
+            new_row.set_cell(cell.family, cell.qualifier, bytes(cell.value), timestamp)
+        self.previous_cells.clear()
+        return new_row
+
+
