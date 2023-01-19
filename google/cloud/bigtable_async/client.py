@@ -17,7 +17,16 @@
 
 import asyncio
 
-from typing import cast, Optional, Union, Dict, List, Tuple, Any, AsyncIterable, Awaitable, TYPE_CHECKING
+from typing import (
+    cast,
+    Optional,
+    Union,
+    Dict,
+    List,
+    Any,
+    AsyncIterable,
+    TYPE_CHECKING,
+)
 
 from google.cloud.client import ClientWithProject
 from google.cloud.bigtable_v2.services.bigtable.async_client import BigtableAsyncClient
@@ -35,7 +44,6 @@ if TYPE_CHECKING:
 
 
 class BigtableDataClient(ClientWithProject):
-
     def __init__(
         self,
         instance: str,
@@ -76,10 +84,10 @@ class BigtableDataClient(ClientWithProject):
             client_options=client_options,
         )
         if type(client_options) is dict:
-            client_options = google.api_core.client_options.from_dict(
-                client_options
-            )
-        client_options = cast(Optional["google.api_core.client_options.ClientOptions"], client_options)
+            client_options = google.api_core.client_options.from_dict(client_options)
+        client_options = cast(
+            Optional["google.api_core.client_options.ClientOptions"], client_options
+        )
         self._instance = instance
         self._gapic_client = BigtableAsyncClient(
             credentials=credentials, client_options=client_options
@@ -88,7 +96,7 @@ class BigtableDataClient(ClientWithProject):
     def test(self):
         print("test")
 
-    def read_rows(self, table_id:str, **kwargs) -> List[Row]:
+    def read_rows(self, table_id: str, **kwargs) -> List[Row]:
         """
         Synchronously returns a list of data obtained from a row query
         """
@@ -96,7 +104,7 @@ class BigtableDataClient(ClientWithProject):
         result = loop.run_until_complete(self.read_rows_async(table_id, **kwargs))
         return result
 
-    async def read_rows_async(self, table_id:str, **kwargs) -> List[Row]:
+    async def read_rows_async(self, table_id: str, **kwargs) -> List[Row]:
         """
         Returns a list of data obtained from a row query
         """
@@ -148,5 +156,5 @@ class BigtableDataClient(ClientWithProject):
             print(f"YIELDING: {row.row_key}")
             yield row
         # if merger.has_partial_frame():
-            # read rows is complete, but there's still data in the merger
-            # raise RuntimeError("Incomplete stream")
+        # read rows is complete, but there's still data in the merger
+        # raise RuntimeError("Incomplete stream")
