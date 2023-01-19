@@ -138,14 +138,14 @@ class BigtableDataClient(ClientWithProject):
         async for result in await self._gapic_client.read_rows(request=request):
             if merger.has_full_frame():
                 row = merger.pop()
-                print(f"YIELDING: {row}")
+                print(f"YIELDING: {row.row_key}")
                 yield row
             else:
                 merger.push(result)
         # flush remaining rows
         if merger.has_full_frame():
             row = merger.pop()
-            print(f"YIELDING: {row}")
+            print(f"YIELDING: {row.row_key}")
             yield row
         # if merger.has_partial_frame():
             # read rows is complete, but there's still data in the merger

@@ -289,7 +289,7 @@ class RowBuilder():
     def finish_row(self) -> Row:
         """called once per row to signal that all cells have been processed (unless reset)"""
         print(f"{self.__class__.__name__}.{inspect.currentframe().f_code.co_name}")
-        new_row = DirectRow(b"")
+        new_row = DirectRow(self.current_key)
         for cell in self.previous_cells:
             # TODO: handle timezones?
             # should probably make a new row class
@@ -297,6 +297,7 @@ class RowBuilder():
             print(cell)
             new_row.set_cell(cell.family, cell.qualifier, bytes(cell.value), timestamp)
         self.previous_cells.clear()
+        self.current_key = None
         return new_row
 
 
