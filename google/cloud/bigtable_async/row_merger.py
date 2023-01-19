@@ -46,7 +46,7 @@ class RowMerger():
         """
         one or more rows are ready and waiting to be consumed
         """
-        return self.merged_rows
+        return bool(self.merged_rows)
 
     def has_partial_frame(self) -> bool:
         """
@@ -69,7 +69,7 @@ class StateMachine():
         self.reset()
 
     def reset(self):
-        self.current_state:Optional[str] = AWAITING_NEW_ROW(self)
+        self.current_state:Optional[State] = AWAITING_NEW_ROW(self)
         self.last_cell_data:Dict[str, Any] = {}
         # self.last_complete_row_key:Optional[bytes] = None
         # self.row_key:Optional[bytes] = None
@@ -84,9 +84,11 @@ class StateMachine():
         self.adapter.reset()
 
     def handle_last_scanned_row(self, last_scanned_row_key:bytes):
+        assert(isinstance(self.current_state, State))
         self.current_state = self.current_state.handle_last_scanned_row(last_scanned_row_key)
 
     def handle_chunk(self, chunk:ReadRowsResponse.CellChunk):
+        assert(isinstance(self.current_state, State))
         self.current_state = self.current_state.handle_chunk(chunk);
 
     def has_complete_row(self) -> bool:
@@ -143,7 +145,7 @@ class AWAITING_NEW_ROW(State):
     """
 
     def handle_last_scanned_row(self, last_scanned_row_key:bytes) -> "State":
-        self._owner.complete_row = self._owner.adapter.create_scan_marker_row(last_complete_row_key)
+        self._owner.complete_row = self._owner.adapter.create_scan_marker_row(last_scanned_row_key)
         return AWAITING_ROW_CONSUME(self._owner)
 
     def handle_chunk(self, chunk:ReadRowsResponse.CellChunk) -> "State":
@@ -262,10 +264,12 @@ class RowBuilder():
 
     def cell_value(self, value:bytes) -> None:
         """called multiple times per cell to concatenate the cell value"""
+        assert(isinstance(self.working_cell, CellData))
         self.working_cell.value.extend(value)
 
     def finish_cell(self) -> None:
         """called once per cell to signal the end of the value (unless reset)"""
+        assert(isinstance(self.working_cell, CellData))
         self.previous_cells.append(self.working_cell)
         self.working_cell = None
 
