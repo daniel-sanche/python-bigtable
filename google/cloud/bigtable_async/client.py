@@ -90,7 +90,7 @@ class BigtableDataClient(ClientWithProject):
         )
         self._instance = instance
         self._gapic_client = BigtableAsyncClient(
-            credentials=credentials, client_options=client_options
+            credentials=credentials, transport="grpc_asyncio_pooled", client_options=client_options
         )
 
     def test(self):
