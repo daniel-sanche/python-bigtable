@@ -54,6 +54,17 @@ class BigtablePooledGrpcAsyncIOTransport(BigtableGrpcAsyncIOTransport):
         transport = self.get_next_channel()
         return transport.read_rows
 
+    @property
+    def mutate_rows(
+        self,
+    ) -> Callable[[bigtable.ReadRowsRequest], Awaitable[bigtable.MutateRowsResponse]]:
+        transport = self.get_next_channel()
+        return transport.mutate_rows
+
+    @property
+    def grpc_channel(self) -> aio.Channel:
+        raise NotImplementedError()
+
     def close(self):
         for channel in self._grpc_channel_pool:
             channel.close()
