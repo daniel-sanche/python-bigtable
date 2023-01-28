@@ -23,6 +23,7 @@ from typing import (
     Union,
     Dict,
     List,
+    Tuple,
     Any,
     AsyncIterable,
     TYPE_CHECKING,
@@ -35,6 +36,7 @@ from google.cloud.bigtable.row_set import RowRange, RowSet
 from google.cloud.bigtable.row import Row
 
 from google.cloud.bigtable_async.row_merger import RowMerger
+from google.cloud.bigtable_v2.types.data import Mutation
 
 if TYPE_CHECKING:
     # import dependencies when type checking
@@ -158,3 +160,26 @@ class BigtableDataClient(ClientWithProject):
         # if merger.has_partial_frame():
         # read rows is complete, but there's still data in the merger
         # raise RuntimeError("Incomplete stream")
+
+    async def mutate_rows_stream(
+        self,
+        table_id: str,
+        row_keys: List[bytes] = None,
+        row_mutations: List[List[Mutation]] = None,
+    ) -> AsyncIterable[Tuple[int, str]]:
+        table_name = (
+            f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
+        )
+        if len(row_keys) != len(row_mutations):
+            ValueError("row_keys and row_mutations are different sizes")
+        print(f"CONNECTING TO TABLE: {table_name}")
+        entry_count = len(row_keys)
+        request: Dict[str, Any] = {
+            "table_name": table_name, 
+            "entries": [{"row_key":row_keys[i], "mutations":row_mutations[i]} for i in range(entry_count)]
+        }
+        async for response in await self._gapic_client.mutate_rows(request=request):
+            for entry in response.entries:
+                yield entry.index, str(entry.status)
+
+
