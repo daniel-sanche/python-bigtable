@@ -236,3 +236,27 @@ class BigtableDataClient(ClientWithProject):
             table_name=table_name, app_profile_id=self._app_profile_id
         ):
             yield response.row_key, response.offset_bytes
+
+    async def check_and_mutate_row(
+        self,
+        table_id: str,
+        row_key: bytes,
+        predicate: RowFilter,
+        mutations_if_true: List[Mutation]=None,
+        mutations_if_false: List[Mutation]=None,
+    ) -> bool:
+        table_name = (
+            f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
+        )
+        print(f"CONNECTING TO TABLE: {table_name}")
+        request: Dict[str, Any] = {
+            "table_name": table_name,
+            "row_key": row_key,
+            "predicate_filter": predicate.to_dict(),
+            "true_mutations": mutations_if_true,
+            "false_mutations": mutations_if_false,
+        }
+        result = await self._gapic_client.check_and_mutate_row(
+            request=request, app_profile_id=self._app_profile_id
+        )
+        return result.predicate_matched
