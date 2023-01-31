@@ -188,7 +188,7 @@ class BigtableDataClient(ClientWithProject):
             request=request, app_profile_id=self._app_profile_id
         )
 
-    async def mutate_rows_stream(
+    async def mutate_rows(
         self,
         table_id: str,
         row_keys: List[bytes],
@@ -223,3 +223,16 @@ class BigtableDataClient(ClientWithProject):
                         mutations: {failed_entry['mutations']}
                     """
                     )
+
+    async def sample_keys(
+        self,
+        table_id: str,
+    ) -> AsyncIterable[Tuple[bytes, int]]:
+        table_name = (
+            f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
+        )
+        print(f"CONNECTING TO TABLE: {table_name}")
+        async for response in await self._gapic_client.sample_row_keys(
+            table_name=table_name, app_profile_id=self._app_profile_id
+        ):
+            yield response.row_key, response.offset_bytes
