@@ -38,6 +38,8 @@ from google.cloud.bigtable.row import Row
 from google.cloud.bigtable_async.row_merger import RowMerger
 from google.cloud.bigtable_v2.types.data import Mutation
 
+from google.rpc.status_pb2 import Status
+
 if TYPE_CHECKING:
     # import dependencies when type checking
     import requests
@@ -184,7 +186,7 @@ class BigtableDataClient(ClientWithProject):
         table_id: str,
         row_keys: List[bytes],
         row_mutations: List[List[Mutation]],
-    ) -> AsyncIterable[Tuple[int, str]]:
+    ):
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
         )
@@ -192,12 +194,23 @@ class BigtableDataClient(ClientWithProject):
             ValueError("row_keys and row_mutations are different sizes")
         print(f"CONNECTING TO TABLE: {table_name}")
         entry_count = len(row_keys)
+        entries = [{"row_key":row_keys[i], "mutations":row_mutations[i]} for i in range(entry_count)]
         request: Dict[str, Any] = {
             "table_name": table_name, 
-            "entries": [{"row_key":row_keys[i], "mutations":row_mutations[i]} for i in range(entry_count)]
+            "entries": entries
         }
         async for response in await self._gapic_client.mutate_rows(request=request):
             for entry in response.entries:
-                yield entry.index, str(entry.status)
+                if entry.status.code > 200:
+                    failed_entry = entries[entry.index]
+                    # TODO: granular errors based on status code
+                    raise RuntimeError(f"""
+                        MutateRows error
+                        status: {entry.status.code}
+                        message: entry.status.message
+                        index: {entry.index}
+                        row_key: {failed_entry['row_key']}
+                        mutations: {failed_entry['mutations']}
+                    """)
 
 
