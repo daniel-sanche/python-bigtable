@@ -51,15 +51,49 @@ class BigtablePooledGrpcAsyncIOTransport(BigtableGrpcAsyncIOTransport):
     def read_rows(
         self,
     ) -> Callable[[bigtable.ReadRowsRequest], Awaitable[bigtable.ReadRowsResponse]]:
-        transport = self.get_next_channel()
-        return transport.read_rows
+        return self.get_next_channel().read_rows
+
+    @property
+    def sample_row_keys(
+        self,
+    ) -> Callable[
+        [bigtable.SampleRowKeysRequest], Awaitable[bigtable.SampleRowKeysResponse]]:
+        return self.get_next_channel().sample_row_keys
 
     @property
     def mutate_rows(
         self,
-    ) -> Callable[[bigtable.ReadRowsRequest], Awaitable[bigtable.MutateRowsResponse]]:
-        transport = self.get_next_channel()
-        return transport.mutate_rows
+    ) -> Callable[[bigtable.MutateRowsRequest], Awaitable[bigtable.MutateRowsResponse]]:
+        return self.get_next_channel().mutate_rows
+
+    @property
+    def mutate_row(
+        self,
+    ) -> Callable[[bigtable.MutateRowRequest], Awaitable[bigtable.MutateRowResponse]]:
+        return self.get_next_channel().mutate_row
+
+    @property
+    def check_and_mutate_row(
+        self,
+    ) -> Callable[
+        [bigtable.CheckAndMutateRowRequest],
+        Awaitable[bigtable.CheckAndMutateRowResponse]]:
+        return self.get_next_channel().check_and_mutate_row
+
+    @property
+    def read_modify_write_row(
+        self,
+    ) -> Callable[
+        [bigtable.ReadModifyWriteRowRequest],
+        Awaitable[bigtable.ReadModifyWriteRowResponse]]:
+        return self.get_next_channel().read_modify_write_row
+
+    @property
+    def ping_and_warm(
+        self,
+    ) -> Callable[
+        [bigtable.PingAndWarmRequest], Awaitable[bigtable.PingAndWarmResponse]]:
+        raise NotImplementedError()
 
     @property
     def grpc_channel(self) -> aio.Channel:
