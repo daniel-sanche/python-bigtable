@@ -161,11 +161,29 @@ class BigtableDataClient(ClientWithProject):
         # read rows is complete, but there's still data in the merger
         # raise RuntimeError("Incomplete stream")
 
+
+    async def mutate_row(
+        self,
+        table_id: str,
+        row_key: bytes,
+        row_mutations: List[Mutation],
+    ):
+        table_name = (
+            f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
+        )
+        print(f"CONNECTING TO TABLE: {table_name}")
+        request: Dict[str, Any] = {
+            "table_name": table_name,
+            "row_key": row_key,
+            "mutations": row_mutations,
+        }
+        return await self._gapic_client.mutate_row(request=request)
+
     async def mutate_rows_stream(
         self,
         table_id: str,
-        row_keys: List[bytes] = None,
-        row_mutations: List[List[Mutation]] = None,
+        row_keys: List[bytes],
+        row_mutations: List[List[Mutation]],
     ) -> AsyncIterable[Tuple[int, str]]:
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
