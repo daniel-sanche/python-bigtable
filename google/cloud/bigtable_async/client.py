@@ -52,6 +52,7 @@ class BigtableDataClient(ClientWithProject):
         self,
         instance: str,
         *,
+        app_profile_id = None,
         project: Optional[str] = None,
         credentials: Optional["google.auth.credentials.Credentials"] = None,
         _http: Optional["requests.Session"] = None,
@@ -93,6 +94,7 @@ class BigtableDataClient(ClientWithProject):
             Optional["google.api_core.client_options.ClientOptions"], client_options
         )
         self._instance = instance
+        self._app_profile_id = app_profile_id
         self._gapic_client = BigtableAsyncClient(
             credentials=credentials, transport="grpc_asyncio_pooled", client_options=client_options
         )
@@ -147,7 +149,7 @@ class BigtableDataClient(ClientWithProject):
                 "row_keys": [s.encode() for s in row_set.row_keys],
                 "row_ranges": [r.get_range_kwargs for r in row_set.row_ranges],
             }
-        async for result in await self._gapic_client.read_rows(request=request):
+        async for result in await self._gapic_client.read_rows(request=request, app_profile_id=self._app_profile_id):
             if merger.has_full_frame():
                 row = merger.pop()
                 print(f"YIELDING: {row.row_key}")
@@ -179,7 +181,7 @@ class BigtableDataClient(ClientWithProject):
             "row_key": row_key,
             "mutations": row_mutations,
         }
-        return await self._gapic_client.mutate_row(request=request)
+        return await self._gapic_client.mutate_row(request=request, app_profile_id=self._app_profile_id)
 
     async def mutate_rows_stream(
         self,
@@ -199,7 +201,7 @@ class BigtableDataClient(ClientWithProject):
             "table_name": table_name, 
             "entries": entries
         }
-        async for response in await self._gapic_client.mutate_rows(request=request):
+        async for response in await self._gapic_client.mutate_rows(request=request, app_profile_id=self._app_profile_id):
             for entry in response.entries:
                 if entry.status.code > 200:
                     failed_entry = entries[entry.index]
