@@ -14,8 +14,13 @@
 #
 
 
-from google.cloud.bigtable_v2.services.bigtable.transports.base import BigtableTransport, DEFAULT_CLIENT_INFO
-from google.cloud.bigtable_v2.services.bigtable.transports.grpc_asyncio import BigtableGrpcAsyncIOTransport
+from google.cloud.bigtable_v2.services.bigtable.transports.base import (
+    BigtableTransport,
+    DEFAULT_CLIENT_INFO,
+)
+from google.cloud.bigtable_v2.services.bigtable.transports.grpc_asyncio import (
+    BigtableGrpcAsyncIOTransport,
+)
 from google.auth import credentials as ga_credentials  # type: ignore
 import grpc  # type: ignore
 from google.api_core import gapic_v1
@@ -23,6 +28,7 @@ from google.cloud.bigtable_v2.types import bigtable
 
 from grpc.experimental import aio  # type: ignore
 from typing import Awaitable, Callable, Dict, Optional, Sequence, Tuple, Union, List
+
 
 class BigtablePooledGrpcAsyncIOTransport(BigtableGrpcAsyncIOTransport):
 
@@ -57,7 +63,8 @@ class BigtablePooledGrpcAsyncIOTransport(BigtableGrpcAsyncIOTransport):
     def sample_row_keys(
         self,
     ) -> Callable[
-        [bigtable.SampleRowKeysRequest], Awaitable[bigtable.SampleRowKeysResponse]]:
+        [bigtable.SampleRowKeysRequest], Awaitable[bigtable.SampleRowKeysResponse]
+    ]:
         return self.get_next_channel().sample_row_keys
 
     @property
@@ -77,7 +84,8 @@ class BigtablePooledGrpcAsyncIOTransport(BigtableGrpcAsyncIOTransport):
         self,
     ) -> Callable[
         [bigtable.CheckAndMutateRowRequest],
-        Awaitable[bigtable.CheckAndMutateRowResponse]]:
+        Awaitable[bigtable.CheckAndMutateRowResponse],
+    ]:
         return self.get_next_channel().check_and_mutate_row
 
     @property
@@ -85,15 +93,17 @@ class BigtablePooledGrpcAsyncIOTransport(BigtableGrpcAsyncIOTransport):
         self,
     ) -> Callable[
         [bigtable.ReadModifyWriteRowRequest],
-        Awaitable[bigtable.ReadModifyWriteRowResponse]]:
+        Awaitable[bigtable.ReadModifyWriteRowResponse],
+    ]:
         return self.get_next_channel().read_modify_write_row
 
-    @property
-    def ping_and_warm(
-        self,
-    ) -> Callable[
-        [bigtable.PingAndWarmRequest], Awaitable[bigtable.PingAndWarmResponse]]:
-        raise NotImplementedError()
+    # @property
+    # def ping_and_warm(
+    #     self,
+    # ) -> Callable[
+    #     [bigtable.PingAndWarmRequest], Awaitable[bigtable.PingAndWarmResponse]
+    # ]:
+    #     raise NotImplementedError()
 
     @property
     def grpc_channel(self) -> aio.Channel:

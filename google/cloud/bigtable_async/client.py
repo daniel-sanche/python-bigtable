@@ -52,7 +52,7 @@ class BigtableDataClient(ClientWithProject):
         self,
         instance: str,
         *,
-        app_profile_id = None,
+        app_profile_id=None,
         project: Optional[str] = None,
         credentials: Optional["google.auth.credentials.Credentials"] = None,
         _http: Optional["requests.Session"] = None,
@@ -96,7 +96,9 @@ class BigtableDataClient(ClientWithProject):
         self._instance = instance
         self._app_profile_id = app_profile_id
         self._gapic_client = BigtableAsyncClient(
-            credentials=credentials, transport="grpc_asyncio_pooled", client_options=client_options
+            credentials=credentials,
+            transport="grpc_asyncio_pooled",
+            client_options=client_options,
         )
 
     def test(self):
@@ -149,7 +151,9 @@ class BigtableDataClient(ClientWithProject):
                 "row_keys": [s.encode() for s in row_set.row_keys],
                 "row_ranges": [r.get_range_kwargs for r in row_set.row_ranges],
             }
-        async for result in await self._gapic_client.read_rows(request=request, app_profile_id=self._app_profile_id):
+        async for result in await self._gapic_client.read_rows(
+            request=request, app_profile_id=self._app_profile_id
+        ):
             if merger.has_full_frame():
                 row = merger.pop()
                 print(f"YIELDING: {row.row_key}")
@@ -164,7 +168,6 @@ class BigtableDataClient(ClientWithProject):
         # if merger.has_partial_frame():
         # read rows is complete, but there's still data in the merger
         # raise RuntimeError("Incomplete stream")
-
 
     async def mutate_row(
         self,
@@ -181,7 +184,9 @@ class BigtableDataClient(ClientWithProject):
             "row_key": row_key,
             "mutations": row_mutations,
         }
-        return await self._gapic_client.mutate_row(request=request, app_profile_id=self._app_profile_id)
+        return await self._gapic_client.mutate_row(
+            request=request, app_profile_id=self._app_profile_id
+        )
 
     async def mutate_rows_stream(
         self,
@@ -196,23 +201,25 @@ class BigtableDataClient(ClientWithProject):
             ValueError("row_keys and row_mutations are different sizes")
         print(f"CONNECTING TO TABLE: {table_name}")
         entry_count = len(row_keys)
-        entries = [{"row_key":row_keys[i], "mutations":row_mutations[i]} for i in range(entry_count)]
-        request: Dict[str, Any] = {
-            "table_name": table_name, 
-            "entries": entries
-        }
-        async for response in await self._gapic_client.mutate_rows(request=request, app_profile_id=self._app_profile_id):
+        entries = [
+            {"row_key": row_keys[i], "mutations": row_mutations[i]}
+            for i in range(entry_count)
+        ]
+        request: Dict[str, Any] = {"table_name": table_name, "entries": entries}
+        async for response in await self._gapic_client.mutate_rows(
+            request=request, app_profile_id=self._app_profile_id
+        ):
             for entry in response.entries:
                 if entry.status.code > 200:
                     failed_entry = entries[entry.index]
                     # TODO: granular errors based on status code
-                    raise RuntimeError(f"""
+                    raise RuntimeError(
+                        f"""
                         MutateRows error
                         status: {entry.status.code}
                         message: entry.status.message
                         index: {entry.index}
                         row_key: {failed_entry['row_key']}
                         mutations: {failed_entry['mutations']}
-                    """)
-
-
+                    """
+                    )
