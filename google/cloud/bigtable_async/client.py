@@ -274,3 +274,45 @@ class BigtableDataClient(ClientWithProject):
             request=request, app_profile_id=self._app_profile_id
         )
         return result.predicate_matched
+
+    async def read_modify_write_row(
+        self,
+        table_id: str,
+        row_key: bytes,
+        family_names: Union[str,List[str]],
+        column_qualifiers: Union[bytes,List[bytes]],
+        increment_amounts: Optional[Union[int,List[int]]]=None,
+        append_values: Optional[Union[bytes,List[bytes]]]=None,
+    ) -> Row:
+        if increment_amounts and append_values:
+            raise ValueError("only one of increment_amounts or append_values should be set")
+        elif (increment_amounts is None and append_values is None):
+            raise ValueError("either increment_amounts or append_values should be set")
+        if isinstance(family_names, str):
+            family_names = [family_names]
+        if isinstance(column_qualifiers, bytes):
+            column_qualifiers = [column_qualifiers]
+        if isinstance(increment_amounts, int):
+            increment_amounts = [increment_amounts]
+        if isinstance(append_values, bytes):
+            append_values = [append_values]
+        table_name = (
+            f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
+        )
+        value_arr = increment_amounts if increment_amounts else append_values
+        value_label = "increment_amount" if increment_amounts else "append_value"
+        if len(family_names) != len(column_qualifiers) or  len(family_names) != len(value_arr):
+            ValueError(f"family_names, column_qualifiers, and {value_label} must be the same size sizes")
+        entry_count = len(family_names)
+        rules = [{"family_name": family_names[i], "column_qualifier": column_qualifiers[i], value_label: value_arr[i]} for i in range(entry_count)]
+        print(f"CONNECTING TO TABLE: {table_name}")
+        request: Dict[str, Any] = {
+            "table_name": table_name,
+            "row_key": row_key,
+            "rules": rules,
+        }
+        result = await self._gapic_client.read_modify_write_row(
+            request=request, app_profile_id=self._app_profile_id
+        )
+        # TODO: parse actual cell here
+        return Row(result.row.key)
