@@ -173,8 +173,10 @@ class BigtableDataClient(ClientWithProject):
         self,
         table_id: str,
         row_key: bytes,
-        row_mutations: List[Mutation],
+        row_mutations: Union[Mutation,List[Mutation]],
     ):
+        if isinstance(row_mutations, Mutation):
+            row_mutations = [row_mutations]
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
         )
@@ -191,14 +193,22 @@ class BigtableDataClient(ClientWithProject):
     async def mutate_rows(
         self,
         table_id: str,
-        row_keys: List[bytes],
-        row_mutations: List[List[Mutation]],
+        row_keys: Union[bytes, List[bytes]],
+        row_mutations: Union[Mutation, List[Mutation], List[List[Mutation]]],
     ):
+        if isinstance(row_keys, bytes):
+            row_keys = [row_keys]
+        if isinstance(row_mutations, Mutation):
+            row_mutations = [[row_mutations]]
+        elif row_mutations and isinstance(row_mutations[0], Mutation):
+            # if a single list of mutations was passed in, assume there's a single row_key
+            row_mutations = [row_mutations]
+        if len(row_keys) != len(row_mutations):
+            ValueError("row_keys and row_mutations are different sizes")
+
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
         )
-        if len(row_keys) != len(row_mutations):
-            ValueError("row_keys and row_mutations are different sizes")
         print(f"CONNECTING TO TABLE: {table_name}")
         entry_count = len(row_keys)
         entries = [
@@ -242,12 +252,16 @@ class BigtableDataClient(ClientWithProject):
         table_id: str,
         row_key: bytes,
         predicate: RowFilter,
-        mutations_if_true: List[Mutation]=None,
-        mutations_if_false: List[Mutation]=None,
+        mutations_if_true: Optional[Union[Mutation,List[Mutation]]]=None,
+        mutations_if_false: Optional[Union[Mutation,List[Mutation]]]=None,
     ) -> bool:
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
         )
+        if isinstance(mutations_if_true, Mutation):
+            mutations_if_true = [mutations_if_true]
+        if isinstance(mutations_if_false, Mutation):
+            mutations_if_false = [mutations_if_false]
         print(f"CONNECTING TO TABLE: {table_name}")
         request: Dict[str, Any] = {
             "table_name": table_name,
