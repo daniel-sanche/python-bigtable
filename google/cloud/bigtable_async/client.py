@@ -39,6 +39,7 @@ from google.cloud.bigtable_async.row_merger import RowMerger
 from google.cloud.bigtable_v2.types.data import Mutation
 
 from google.rpc.status_pb2 import Status
+from google.api_core import exceptions as core_exceptions
 
 if TYPE_CHECKING:
     # import dependencies when type checking
@@ -220,19 +221,18 @@ class BigtableDataClient(ClientWithProject):
             request=request, app_profile_id=self._app_profile_id
         ):
             for entry in response.entries:
-                if entry.status.code > 200:
+                if entry.status.code != 0:
                     failed_entry = entries[entry.index]
-                    # TODO: granular errors based on status code
-                    raise RuntimeError(
-                        f"""
-                        MutateRows error
-                        status: {entry.status.code}
-                        message: entry.status.message
+                    # TODO: how should we pass mutation data into exception? (details or error_info?)
+                    # https://github.com/googleapis/python-api-core/blob/b6eb6dee2762b602d553ace510808afd67af461d/google/api_core/exceptions.py#L106
+                    message = f"""
+                        {entry.status.message}
+
                         index: {entry.index}
                         row_key: {failed_entry['row_key']}
                         mutations: {failed_entry['mutations']}
                     """
-                    )
+                    raise core_exceptions.from_grpc_status(entry.status.code, message)
 
     async def sample_keys(
         self,
