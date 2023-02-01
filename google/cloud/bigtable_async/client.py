@@ -33,6 +33,7 @@ from google.cloud.client import ClientWithProject
 from google.cloud.bigtable_v2.services.bigtable.async_client import BigtableAsyncClient
 from google.cloud.bigtable.row_filters import RowFilter
 from google.cloud.bigtable.row_set import RowRange, RowSet
+from google.cloud.bigtable.row_data import PartialCellData
 from google.cloud.bigtable.row import Row
 
 from google.cloud.bigtable_async.row_merger import RowMerger
@@ -283,7 +284,7 @@ class BigtableDataClient(ClientWithProject):
         column_qualifiers: Union[bytes,List[bytes]],
         increment_amounts: Optional[Union[int,List[int]]]=None,
         append_values: Optional[Union[bytes,List[bytes]]]=None,
-    ) -> Row:
+    ) -> List[PartialCellData]:
         if increment_amounts and append_values:
             raise ValueError("only one of increment_amounts or append_values should be set")
         elif (increment_amounts is None and append_values is None):
@@ -314,5 +315,10 @@ class BigtableDataClient(ClientWithProject):
         result = await self._gapic_client.read_modify_write_row(
             request=request, app_profile_id=self._app_profile_id
         )
-        # TODO: parse actual cell here
-        return Row(result.row.key)
+        cells_updated = []
+        for family in result.row.families:
+            for column in family.columns:
+                for cell in column.cells:
+                    new_cell = PartialCellData(result.row.key, family.name, column.qualifier, cell.timestamp_micros, cell.labels, cell.value)
+                    cells_updated.append(new_cell)
+        return cells_updated
