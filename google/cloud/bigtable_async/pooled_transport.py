@@ -32,9 +32,6 @@ from typing import Awaitable, Callable, Dict, Optional, Sequence, Tuple, Union, 
 
 class BigtablePooledGrpcAsyncIOTransport(BigtableGrpcAsyncIOTransport):
 
-    _grpc_channel_pool: List[BigtableTransport] = []
-    _next_idx = 0
-
     def get_next_channel(self) -> BigtableTransport:
         print(f"USING CHANNEL: {self._next_idx}")
         next_channel = self._grpc_channel_pool[self._next_idx]
@@ -47,6 +44,8 @@ class BigtablePooledGrpcAsyncIOTransport(BigtableGrpcAsyncIOTransport):
         num_channels=3,
         **kwargs,
     ) -> None:
+        self._grpc_channel_pool = []
+        self._next_idx = 0
         for i in range(num_channels):
             new_transport = BigtableGrpcAsyncIOTransport(**kwargs)
             # warm channel
