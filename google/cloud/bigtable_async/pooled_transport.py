@@ -50,7 +50,7 @@ class BigtablePooledGrpcAsyncIOTransport(BigtableGrpcAsyncIOTransport):
         for i in range(num_channels):
             new_transport = BigtableGrpcAsyncIOTransport(**kwargs)
             # warm channel
-            new_transport.ping_and_warm({})
+            new_transport.ping_and_warm(bigtable.PingAndWarmRequest({}))
             self._grpc_channel_pool.append(new_transport)
 
     @property

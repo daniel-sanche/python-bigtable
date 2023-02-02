@@ -175,7 +175,7 @@ class BigtableDataClient(ClientWithProject):
         self,
         table_id: str,
         row_key: bytes,
-        row_mutations: Union[Mutation,List[Mutation]],
+        row_mutations: Union[Mutation, List[Mutation]],
     ):
         if isinstance(row_mutations, Mutation):
             row_mutations = [row_mutations]
@@ -204,7 +204,7 @@ class BigtableDataClient(ClientWithProject):
             row_mutations = [[row_mutations]]
         elif row_mutations and isinstance(row_mutations[0], Mutation):
             # if a single list of mutations was passed in, assume there's a single row_key
-            row_mutations = [row_mutations]
+            row_mutations = [cast(List[Mutation], row_mutations)]
         if len(row_keys) != len(row_mutations):
             ValueError("row_keys and row_mutations are different sizes")
 
@@ -223,15 +223,16 @@ class BigtableDataClient(ClientWithProject):
         ):
             for entry in response.entries:
                 if entry.status.code != 0:
-                    failed_entry = entries[entry.index]
+                    failed_mutations = row_mutations[entry.index]
+                    failed_entry_key = row_keys[entry.index]
                     # TODO: how should we pass mutation data into exception? (details or error_info?)
                     # https://github.com/googleapis/python-api-core/blob/b6eb6dee2762b602d553ace510808afd67af461d/google/api_core/exceptions.py#L106
                     message = f"""
                         {entry.status.message}
 
                         index: {entry.index}
-                        row_key: {failed_entry['row_key']}
-                        mutations: {failed_entry['mutations']}
+                        row_key: {failed_entry_key.decode()}
+                        mutations: {len(failed_mutations)}
                     """
                     raise core_exceptions.from_grpc_status(entry.status.code, message)
 
@@ -253,8 +254,8 @@ class BigtableDataClient(ClientWithProject):
         table_id: str,
         row_key: bytes,
         predicate: RowFilter,
-        mutations_if_true: Optional[Union[Mutation,List[Mutation]]]=None,
-        mutations_if_false: Optional[Union[Mutation,List[Mutation]]]=None,
+        mutations_if_true: Optional[Union[Mutation, List[Mutation]]] = None,
+        mutations_if_false: Optional[Union[Mutation, List[Mutation]]] = None,
     ) -> bool:
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
@@ -280,14 +281,16 @@ class BigtableDataClient(ClientWithProject):
         self,
         table_id: str,
         row_key: bytes,
-        family_names: Union[str,List[str]],
-        column_qualifiers: Union[bytes,List[bytes]],
-        increment_amounts: Optional[Union[int,List[int]]]=None,
-        append_values: Optional[Union[bytes,List[bytes]]]=None,
+        family_names: Union[str, List[str]],
+        column_qualifiers: Union[bytes, List[bytes]],
+        increment_amounts: Optional[Union[int, List[int]]] = None,
+        append_values: Optional[Union[bytes, List[bytes]]] = None,
     ) -> List[PartialCellData]:
         if increment_amounts and append_values:
-            raise ValueError("only one of increment_amounts or append_values should be set")
-        elif (increment_amounts is None and append_values is None):
+            raise ValueError(
+                "only one of increment_amounts or append_values should be set"
+            )
+        elif increment_amounts is None and append_values is None:
             raise ValueError("either increment_amounts or append_values should be set")
         if isinstance(family_names, str):
             family_names = [family_names]
@@ -301,11 +304,23 @@ class BigtableDataClient(ClientWithProject):
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
         )
         value_arr = increment_amounts if increment_amounts else append_values
+        value_arr = cast(Union[List[bytes],List[int]], value_arr)
         value_label = "increment_amount" if increment_amounts else "append_value"
-        if len(family_names) != len(column_qualifiers) or  len(family_names) != len(value_arr):
-            ValueError(f"family_names, column_qualifiers, and {value_label} must be the same size sizes")
+        if len(family_names) != len(column_qualifiers) or len(family_names) != len(
+            value_arr
+        ):
+            ValueError(
+                f"family_names, column_qualifiers, and {value_label} must be the same size sizes"
+            )
         entry_count = len(family_names)
-        rules = [{"family_name": family_names[i], "column_qualifier": column_qualifiers[i], value_label: value_arr[i]} for i in range(entry_count)]
+        rules = [
+            {
+                "family_name": family_names[i],
+                "column_qualifier": column_qualifiers[i],
+                value_label: value_arr[i],
+            }
+            for i in range(entry_count)
+        ]
         print(f"CONNECTING TO TABLE: {table_name}")
         request: Dict[str, Any] = {
             "table_name": table_name,
@@ -319,6 +334,13 @@ class BigtableDataClient(ClientWithProject):
         for family in result.row.families:
             for column in family.columns:
                 for cell in column.cells:
-                    new_cell = PartialCellData(result.row.key, family.name, column.qualifier, cell.timestamp_micros, cell.labels, cell.value)
+                    new_cell = PartialCellData(
+                        result.row.key,
+                        family.name,
+                        column.qualifier,
+                        cell.timestamp_micros,
+                        cell.labels,
+                        cell.value,
+                    )
                     cells_updated.append(new_cell)
         return cells_updated
