@@ -61,21 +61,35 @@ def extract_results_from_row(row: PartialRowData):
     return results
 
 
-# @pytest.mark.parametrize(
-#     "test_case", parse_readrows_acceptance_tests(), ids=lambda t: t.description
-# )
-# def test_scenario(test_case: ReadRowsTest):
-#     def fake_read(*args, **kwargs):
-#         return iter([ReadRowsResponse(chunks=test_case.chunks)])
-#     actual_results: List[ReadRowsTest.Result] = []
-#     try:
-#         for row in PartialRowsData(fake_read, request=None):
-#             actual_results.extend(extract_results_from_row(row))
-#     except (InvalidChunk, ValueError):
-#         actual_results.append(ReadRowsTest.Result(error=True))
+@pytest.mark.parametrize(
+    "test_case", parse_readrows_acceptance_tests(), ids=lambda t: t.description
+)
+def test_scenario(test_case: ReadRowsTest):
+    results = []
+    try:
+        merger = RowMerger()
+        for chunk in test_case.chunks:
+            req = ReadRowsResponse.pb(ReadRowsResponse(chunks=[chunk]))
+            merger.push(req)
+            if merger.has_full_frame():
+                row = merger.pop()
+                results.extend(extract_results_from_row(row))
+    except InvalidChunk as e:
+        results.append(
+            ReadRowsTest.Result(error=True)
+        )
+    for expected, actual in zip_longest(test_case.results, results):
+        assert actual == expected
+    # def fake_read(*args, **kwargs):
+    #     return iter([ReadRowsResponse(chunks=test_case.chunks)])
+    # actual_results: List[ReadRowsTest.Result] = []
+    # try:
+    #     for row in PartialRowsData(fake_read, request=None):
+    #         actual_results.extend(extract_results_from_row(row))
+    # except (InvalidChunk, ValueError):
+    #     actual_results.append(ReadRowsTest.Result(error=True))
+    # breakpoint()
 
-#     for expected, actual in zip_longest(test_case.results, actual_results):
-#         assert actual == expected
 
 
 def test_out_of_order_rows():
@@ -229,4 +243,3 @@ def _process_chunks(*chunks):
     req = ReadRowsResponse.pb(ReadRowsResponse(chunks=chunks))
     merger = RowMerger()
     merger.push(req)
-    merger.has_full_frame()

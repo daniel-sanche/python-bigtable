@@ -14,7 +14,7 @@
 #
 
 from google.cloud.bigtable_v2.types.bigtable import ReadRowsResponse
-from google.cloud.bigtable.row import Row, DirectRow, InvalidChunk
+from google.cloud.bigtable.row import Row, DirectRow, InvalidChunk, PartialRowData, Cell
 from collections import deque, namedtuple
 from datetime import datetime
 
@@ -26,7 +26,7 @@ from typing import Deque, Optional, List, Dict, Any
 
 class RowMerger:
     def __init__(self):
-        self.merged_rows: Deque[Row] = deque([])
+        self.merged_rows: Deque[PartialRowData] = deque([])
         self.state_machine = StateMachine()
 
     def push(self, new_data: ReadRowsResponse):
@@ -55,7 +55,7 @@ class RowMerger:
         """
         return self.has_full_frame() or self.state_machine.is_row_in_progress()
 
-    def pop(self) -> Row:
+    def pop(self) -> PartialRowData:
         """
         Return a row out of the cache of waiting rows
         """
@@ -81,7 +81,7 @@ class StateMachine:
         # self.labels:List[str] = None
         # self.expected_cell_size:int = 0
         # self.remaining_cell_bytes:int = 0
-        self.complete_row: Optional[Row] = None
+        self.complete_row: Optional[PartialRowData] = None
         # self.num_cells_in_row:int = 0
         self.adapter.reset()
 
@@ -104,7 +104,7 @@ class StateMachine:
             and self.complete_row is not None
         )
 
-    def consume_row(self) -> Row:
+    def consume_row(self) -> PartialRowData:
         """
         Returns the last completed row and transitions to a new row
         """
@@ -314,9 +314,9 @@ class RowBuilder:
         self.working_cell: Optional[CellData] = None
         self.previous_cells: List[CellData] = []
 
-    def create_scan_marker_row(self, key: bytes) -> Row:
+    def create_scan_marker_row(self, key: bytes) -> PartialRowData:
         """creates a special row to mark server progress before any data is received"""
-        return Row(key)
+        return PartialRowData(key)
 
     def start_row(self, key: bytes) -> None:
         """Called to start a new row. This will be called once per row"""
@@ -348,13 +348,19 @@ class RowBuilder:
         self.previous_cells.append(self.working_cell)
         self.working_cell = None
 
-    def finish_row(self) -> Row:
+    def finish_row(self) -> PartialRowData:
         """called once per row to signal that all cells have been processed (unless reset)"""
-        new_row = DirectRow(self.current_key)
+        cell_data = {}
         for cell in self.previous_cells:
             # TODO: handle timezones?
             # should probably make a new row class
-            timestamp = datetime.fromtimestamp(cell.timestamp / 1e6)
-            new_row.set_cell(cell.family, cell.qualifier, bytes(cell.value), timestamp)
+            # timestamp = datetime.fromtimestamp(cell.timestamp / 1e6)
+            family_dict = cell_data.get(cell.family, {})
+            qualifier_arr = family_dict.get(cell.qualifier, [])
+            qualifier_arr.append(Cell(bytes(cell.value), cell.timestamp, cell.labels))
+            family_dict[cell.qualifier] = qualifier_arr
+            cell_data[cell.family] = family_dict
+        new_row = PartialRowData(self.current_key)
+        new_row._cells = cell_data
         self.reset()
         return new_row
