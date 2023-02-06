@@ -33,7 +33,7 @@ class RowMerger:
         last_scanned = new_data.last_scanned_row_key
         # if the server sends a scan heartbeat, notify the state machine.
         if last_scanned:
-            self.state_machine.handle_last_scanned_row(last_scanned.value)
+            self.state_machine.handle_last_scanned_row(last_scanned)
             if self.state_machine.has_complete_row():
                 self.merged_rows.append(self.state_machine.consume_row())
         # process new chunks through the state machine.
@@ -70,6 +70,8 @@ class StateMachine:
     def reset(self):
         self.current_state: Optional[State] = AWAITING_NEW_ROW(self)
         self.last_cell_data: Dict[str, Any] = {}
+        # represents either the last row emitted, or the last_scanned_key sent from backend
+        # all future rows should have keys > last_seen_row_key
         self.last_seen_row_key:Optional[bytes] = None
         # self.last_complete_row_key:Optional[bytes] = None
         # self.row_key:Optional[bytes] = None
