@@ -18,7 +18,7 @@ from google.cloud.bigtable.row import Row, DirectRow, InvalidChunk, PartialRowDa
 from collections import deque, namedtuple
 from datetime import datetime
 
-from typing import Deque, Optional, List, Dict, Any
+from typing import Deque, Optional, List, Dict, Set, Any
 
 # java implementation:
 # https://github.com/googleapis/java-bigtable/blob/8b120de58f0dfba3573ab696fb0e5375e917a00e/google-cloud-bigtable/src/main/java/com/google/cloud/bigtable/data/v2/stub/readrows/RowMerger.java
@@ -64,6 +64,7 @@ class RowMerger:
 
 class StateMachine:
     def __init__(self):
+        self.completed_row_keys:Set[bytes] = set({})
         self.adapter: "RowBuilder" = RowBuilder()
         self.reset()
 
@@ -73,12 +74,6 @@ class StateMachine:
         # represents either the last row emitted, or the last_scanned_key sent from backend
         # all future rows should have keys > last_seen_row_key
         self.last_seen_row_key:Optional[bytes] = None
-        # self.last_complete_row_key:Optional[bytes] = None
-        # self.row_key:Optional[bytes] = None
-        # self.family_name:Optional[str] = None
-        # self.qualifier:Optional[str] = None
-        # self.timestamp:int = 0
-        # self.labels:List[str] = None
         # self.expected_cell_size:int = 0
         # self.remaining_cell_bytes:int = 0
         self.complete_row: Optional[PartialRowData] = None
@@ -96,6 +91,8 @@ class StateMachine:
 
     def handle_chunk(self, chunk: ReadRowsResponse.CellChunk):
         assert isinstance(self.current_state, State)
+        if chunk.row_key in self.completed_row_keys:
+            raise InvalidChunk(f"duplicate row key: {chunk.row_key}")
         self.current_state = self.current_state.handle_chunk(chunk)
 
     def has_complete_row(self) -> bool:
@@ -112,6 +109,7 @@ class StateMachine:
             raise RuntimeError("No row to consume")
         row = self.complete_row
         self.reset()
+        self.completed_row_keys.add(row.row_key)
         return row
 
     def is_row_in_progress(self) -> bool:
