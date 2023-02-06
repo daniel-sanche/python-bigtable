@@ -99,12 +99,9 @@ class BigtableDataClient(ClientWithProject):
         self._app_profile_id = app_profile_id
         self._gapic_client = BigtableAsyncClient(
             credentials=credentials,
-            transport="grpc_asyncio_pooled",
+            # transport="grpc_asyncio_pooled",
             client_options=client_options,
         )
-
-    def test(self):
-        print("test")
 
     def read_rows(self, table_id: str, **kwargs) -> List[Row]:
         """
