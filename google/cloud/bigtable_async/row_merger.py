@@ -203,10 +203,14 @@ class AWAITING_NEW_CELL(State):
         expected_cell_size = chunk.value_size if is_split else chunk_size
 
         # track latest cell data. New chunks won't send repeated data
-        if chunk.family_name:
+        if chunk.family_name.value:
             self._owner.last_cell_data["family"] = chunk.family_name.value
-        if chunk.qualifier:
+            if not chunk.qualifier.value:
+                raise InvalidChunk("new column family must specify qualifier")
+        if chunk.qualifier.value:
             self._owner.last_cell_data["qualifier"] = chunk.qualifier.value
+            if not self._owner.last_cell_data.get("family", False):
+                raise InvalidChunk("family not found")
         self._owner.last_cell_data["labels"] = chunk.labels
         self._owner.last_cell_data["timestamp"] = chunk.timestamp_micros
 
