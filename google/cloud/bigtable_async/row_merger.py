@@ -33,7 +33,7 @@ class RowMerger:
         last_scanned = new_data.last_scanned_row_key
         # if the server sends a scan heartbeat, notify the state machine.
         if last_scanned:
-            self.state_machine.handle_last_scanned_row(last_scanned)
+            self.state_machine.handle_last_scanned_row(last_scanned.value)
             if self.state_machine.has_complete_row():
                 self.merged_rows.append(self.state_machine.consume_row())
         # process new chunks through the state machine.
@@ -70,6 +70,7 @@ class StateMachine:
     def reset(self):
         self.current_state: Optional[State] = AWAITING_NEW_ROW(self)
         self.last_cell_data: Dict[str, Any] = {}
+        self.last_seen_row_key:Optional[bytes] = None
         # self.last_complete_row_key:Optional[bytes] = None
         # self.row_key:Optional[bytes] = None
         # self.family_name:Optional[str] = None
@@ -83,6 +84,9 @@ class StateMachine:
         self.adapter.reset()
 
     def handle_last_scanned_row(self, last_scanned_row_key: bytes):
+        if self.last_seen_row_key and self.last_seen_row_key >= last_scanned_row_key:
+            raise InvalidChunk("Last scanned row key is out of order")
+        self.last_scanned_row_key = last_scanned_row_key
         assert isinstance(self.current_state, State)
         self.current_state = self.current_state.handle_last_scanned_row(
             last_scanned_row_key
@@ -117,7 +121,7 @@ class StateMachine:
         Wait in AWAITING_ROW_CONSUME state for the RowMerger to consume it
         """
         self.complete_row = self.adapter.finish_row()
-        # self.last_complete_row_key = self.complete_row.key
+        self.last_seen_row_key = self.complete_row.row_key
         return AWAITING_ROW_CONSUME(self)
 
     def handle_reset_chunk(
@@ -174,6 +178,8 @@ class AWAITING_NEW_ROW(State):
     def handle_chunk(self, chunk: ReadRowsResponse.CellChunk) -> "State":
         if not chunk.row_key:
             raise InvalidChunk("New row is missing a row key")
+        if self._owner.last_seen_row_key and self._owner.last_seen_row_key >= chunk.row_key.value:
+            raise InvalidChunk("Out of order row keys")
         self._owner.adapter.start_row(chunk.row_key)
         # the first chunk signals both the start of a new row and the start of a new cell, so
         # force the chunk processing in the AWAITING_CELL_VALUE.
@@ -285,8 +291,8 @@ class RowBuilder:
     def __init__(self):
         self.reset()
 
-    def row_in_progress() -> bool:
-        return self.current_state is not None
+    def row_in_progress(self) -> bool:
+        return self.current_key is not None
 
     def reset(self) -> None:
         """called when the current in progress row should be dropped"""
