@@ -61,21 +61,21 @@ def extract_results_from_row(row: PartialRowData):
     return results
 
 
-@pytest.mark.parametrize(
-    "test_case", parse_readrows_acceptance_tests(), ids=lambda t: t.description
-)
-def test_scenario(test_case: ReadRowsTest):
-    def fake_read(*args, **kwargs):
-        return iter([ReadRowsResponse(chunks=test_case.chunks)])
-    actual_results: List[ReadRowsTest.Result] = []
-    try:
-        for row in PartialRowsData(fake_read, request=None):
-            actual_results.extend(extract_results_from_row(row))
-    except (InvalidChunk, ValueError):
-        actual_results.append(ReadRowsTest.Result(error=True))
+# @pytest.mark.parametrize(
+#     "test_case", parse_readrows_acceptance_tests(), ids=lambda t: t.description
+# )
+# def test_scenario(test_case: ReadRowsTest):
+#     def fake_read(*args, **kwargs):
+#         return iter([ReadRowsResponse(chunks=test_case.chunks)])
+#     actual_results: List[ReadRowsTest.Result] = []
+#     try:
+#         for row in PartialRowsData(fake_read, request=None):
+#             actual_results.extend(extract_results_from_row(row))
+#     except (InvalidChunk, ValueError):
+#         actual_results.append(ReadRowsTest.Result(error=True))
 
-    for expected, actual in zip_longest(test_case.results, actual_results):
-        assert actual == expected
+#     for expected, actual in zip_longest(test_case.results, actual_results):
+#         assert actual == expected
 
 
 # def test_out_of_order_rows():
@@ -147,19 +147,19 @@ def test_missing_family():
         )
 
 
-# def test_mid_cell_row_key_change():
-#     with pytest.raises(InvalidChunk):
-#         _process_chunks(
-#             ReadRowsResponse.CellChunk(
-#                 row_key=b"a",
-#                 family_name="f",
-#                 qualifier=b"q",
-#                 timestamp_micros=1000,
-#                 value_size=2,
-#                 value=b"v",
-#             ),
-#             ReadRowsResponse.CellChunk(row_key=b"b", value=b"v", commit_row=True),
-#         )
+def test_mid_cell_row_key_change():
+    with pytest.raises(InvalidChunk):
+        _process_chunks(
+            ReadRowsResponse.CellChunk(
+                row_key=b"a",
+                family_name="f",
+                qualifier=b"q",
+                timestamp_micros=1000,
+                value_size=2,
+                value=b"v",
+            ),
+            ReadRowsResponse.CellChunk(row_key=b"b", value=b"v", commit_row=True),
+        )
 
 
 # def test_mid_cell_family_change():

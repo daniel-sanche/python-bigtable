@@ -172,6 +172,8 @@ class AWAITING_NEW_ROW(State):
         return AWAITING_ROW_CONSUME(self._owner)
 
     def handle_chunk(self, chunk: ReadRowsResponse.CellChunk) -> "State":
+        if not chunk.row_key:
+            raise InvalidChunk("New row is missing a row key")
         self._owner.adapter.start_row(chunk.row_key)
         # the first chunk signals both the start of a new row and the start of a new cell, so
         # force the chunk processing in the AWAITING_CELL_VALUE.
@@ -199,6 +201,11 @@ class AWAITING_NEW_CELL(State):
             self._owner.last_cell_data["qualifier"] = chunk.qualifier.value
         self._owner.last_cell_data["labels"] = chunk.labels
         self._owner.last_cell_data["timestamp"] = chunk.timestamp_micros
+
+        # ensure that all chunks after the first one either are missing a row
+        # key or the row is the same
+        if self._owner.adapter.row_in_progress() and chunk.row_key and chunk.row_key != self._owner.adapter.current_key:
+            raise InvalidChunk("row key changed mid row")
 
         self._owner.adapter.start_cell(
             **self._owner.last_cell_data, size=expected_cell_size
@@ -278,6 +285,9 @@ class RowBuilder:
     def __init__(self):
         self.reset()
 
+    def row_in_progress() -> bool:
+        return self.current_state is not None
+
     def reset(self) -> None:
         """called when the current in progress row should be dropped"""
         self.current_key: Optional[bytes] = None
@@ -326,6 +336,5 @@ class RowBuilder:
             # should probably make a new row class
             timestamp = datetime.fromtimestamp(cell.timestamp / 1e6)
             new_row.set_cell(cell.family, cell.qualifier, bytes(cell.value), timestamp)
-        self.previous_cells.clear()
-        self.current_key = None
+        self.reset()
         return new_row
