@@ -239,6 +239,18 @@ class AWAITING_CELL_VALUE(State):
     """
 
     def handle_chunk(self, chunk: ReadRowsResponse.CellChunk) -> "State":
+        # ensure reset chunk matches expectations
+        if chunk.row_key:
+            raise InvalidChunk("found row key mid cell")
+        if chunk.HasField("family_name"):
+            raise InvalidChunk("In progress cell had a family name")
+        if chunk.HasField("qualifier"):
+            raise InvalidChunk("In progress cell had a qualifier")
+        if chunk.timestamp_micros:
+            raise InvalidChunk("In progress cell had a timestamp")
+        if chunk.labels:
+            raise InvalidChunk("In progress cell had labels")
+        # check for reset row
         if chunk.reset_row:
             return self._owner.handle_reset_chunk(chunk)
         is_last = chunk.value_size == 0
