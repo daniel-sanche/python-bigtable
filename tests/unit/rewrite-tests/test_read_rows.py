@@ -134,17 +134,17 @@ def test_bare_reset():
         )
 
 
-# def test_missing_family():
-#     with pytest.raises(InvalidChunk):
-#         _process_chunks(
-#             ReadRowsResponse.CellChunk(
-#                 row_key=b"a",
-#                 qualifier=b"q",
-#                 timestamp_micros=1000,
-#                 value=b"v",
-#                 commit_row=True,
-#             )
-#         )
+def test_missing_family():
+    with pytest.raises(InvalidChunk):
+        _process_chunks(
+            ReadRowsResponse.CellChunk(
+                row_key=b"a",
+                qualifier=b"q",
+                timestamp_micros=1000,
+                value=b"v",
+                commit_row=True,
+            )
+        )
 
 
 # def test_mid_cell_row_key_change():
@@ -227,6 +227,5 @@ def test_bare_reset():
 def _process_chunks(*chunks):
     req = ReadRowsResponse.pb(ReadRowsResponse(chunks=chunks))
     merger = RowMerger()
-    breakpoint()
     merger.push(req)
     merger.has_full_frame()

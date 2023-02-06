@@ -14,7 +14,7 @@
 #
 
 from google.cloud.bigtable_v2.types.bigtable import ReadRowsResponse
-from google.cloud.bigtable.row import Row, DirectRow
+from google.cloud.bigtable.row import Row, DirectRow, InvalidChunk
 from collections import deque, namedtuple
 from datetime import datetime
 
@@ -126,6 +126,21 @@ class StateMachine:
         """
         When a reset chunk comes in, drop all buffers and reset to AWAITING_NEW_ROW state
         """
+        # ensure reset chunk matches expectations
+        if isinstance(self.current_state, AWAITING_NEW_ROW):
+            raise InvalidChunk("Bare reset")
+        if chunk.row_key:
+            raise InvalidChunk("Reset chunk has a row key")
+        if chunk.HasField("family_name"):
+            raise InvalidChunk("Reset chunk has family_name")
+        if chunk.HasField("qualifier"):
+            raise InvalidChunk("Reset chunk has qualifier")
+        if chunk.timestamp_micros:
+            raise InvalidChunk("Reset chunk has a timestamp")
+        if chunk.labels:
+            raise InvalidChunk("Reset chunk has labels")
+        if chunk.value:
+            raise InvalidChunk("Reset chunk has a value")
         self.reset()
         assert isinstance(self.current_state, AWAITING_NEW_ROW)
         return self.current_state
@@ -179,9 +194,9 @@ class AWAITING_NEW_CELL(State):
 
         # track latest cell data. New chunks won't send repeated data
         if chunk.family_name:
-            self._owner.last_cell_data["family"] = chunk.family_name
+            self._owner.last_cell_data["family"] = chunk.family_name.value
         if chunk.qualifier:
-            self._owner.last_cell_data["qualifier"] = chunk.qualifier
+            self._owner.last_cell_data["qualifier"] = chunk.qualifier.value
         self._owner.last_cell_data["labels"] = chunk.labels
         self._owner.last_cell_data["timestamp"] = chunk.timestamp_micros
 
@@ -286,6 +301,10 @@ class RowBuilder:
         size: int,
     ) -> None:
         """called to start a new cell in a row."""
+        if not family:
+            raise InvalidChunk("missing family for a new cell")
+        if qualifier is None:
+            raise InvalidChunk("missing qualifier for a new cell")
         self.working_cell = CellData(family, qualifier, timestamp, labels, bytearray())
 
     def cell_value(self, value: bytes) -> None:
