@@ -74,6 +74,8 @@ def test_scenario(test_case: ReadRowsTest):
             if merger.has_full_frame():
                 row = merger.pop()
                 results.extend(extract_results_from_row(row))
+        if merger.has_partial_frame():
+            raise InvalidChunk("merger has partial frame after reading")
     except InvalidChunk as e:
         results.append(
             ReadRowsTest.Result(error=True)

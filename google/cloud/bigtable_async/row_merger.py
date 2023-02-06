@@ -115,7 +115,7 @@ class StateMachine:
         return row
 
     def is_row_in_progress(self) -> bool:
-        return isinstance(self.current_state, AWAITING_NEW_ROW)
+        return not isinstance(self.current_state, AWAITING_NEW_ROW)
 
     def handle_commit_row(self) -> "State":
         """
