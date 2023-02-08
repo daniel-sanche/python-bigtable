@@ -15,6 +15,7 @@
 
 from google.cloud.bigtable_v2.types.bigtable import ReadRowsResponse
 from google.cloud.bigtable.row import Row, DirectRow, InvalidChunk, PartialRowData, Cell
+from google.protobuf.wrappers_pb2 import StringValue, BytesValue
 from collections import deque, namedtuple
 from datetime import datetime
 
@@ -199,14 +200,16 @@ class AWAITING_NEW_CELL(State):
         chunk_size = len(chunk.value)
         is_split = chunk.value_size > 0
         expected_cell_size = chunk.value_size if is_split else chunk_size
-
+        # unwrap proto values if needed
+        family_name = chunk.family_name.value if isinstance(chunk.family_name, StringValue) else chunk.family_name
+        qualifier = chunk.qualifier.value if isinstance(chunk.qualifier, BytesValue) else chunk.qualifier
         # track latest cell data. New chunks won't send repeated data
-        if chunk.family_name.value:
-            self._owner.last_cell_data["family"] = chunk.family_name.value
-            if not chunk.qualifier.value:
+        if family_name:
+            self._owner.last_cell_data["family"] = family_name
+            if not qualifier:
                 raise InvalidChunk("new column family must specify qualifier")
-        if chunk.qualifier.value:
-            self._owner.last_cell_data["qualifier"] = chunk.qualifier.value
+        if qualifier:
+            self._owner.last_cell_data["qualifier"] = qualifier
             if not self._owner.last_cell_data.get("family", False):
                 raise InvalidChunk("family not found")
         self._owner.last_cell_data["labels"] = chunk.labels
