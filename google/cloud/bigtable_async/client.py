@@ -150,6 +150,11 @@ class BigtableDataClient(ClientWithProject):
                 "row_keys": [s.encode() for s in row_set.row_keys],
                 "row_ranges": [r.get_range_kwargs for r in row_set.row_ranges],
             }
+        emitted_rows = set()
+        async for result in await self._read_rows_helper(request, emitted_rows):
+            yield result
+
+    async def _read_rows_helper(request, emitted_rows):
         async for result in await self._gapic_client.read_rows(
             request=request, app_profile_id=self._app_profile_id
         ):
@@ -162,11 +167,15 @@ class BigtableDataClient(ClientWithProject):
         # flush remaining rows
         if merger.has_full_frame():
             row = merger.pop()
-            print(f"YIELDING: {row.row_key}")
-            yield row
-        # if merger.has_partial_frame():
-        # read rows is complete, but there's still data in the merger
-        # raise RuntimeError("Incomplete stream")
+            if row.row_key not in emitted_rows:
+                emitted_rows.add(row.row_key)
+                print(f"YIELDING: {row.row_key}")
+                yield row
+            else:
+                print(f"SKIPPING ROW: {row.row_key}")
+        if merger.has_partial_frame():
+            # read rows is complete, but there's still data in the merger
+            raise RuntimeError("read_rows completed with partial state remaining")
 
     async def mutate_row(
         self,
