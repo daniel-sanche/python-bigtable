@@ -163,20 +163,24 @@ class BigtableDataClient(ClientWithProject):
             on_error=on_error,
         )
         retryable_fn = retry(self._read_rows_helper)
-        async for result in retryable_fn(request, emitted_rows):
+        async for result in await retryable_fn(request, emitted_rows):
+        # async for result in self._read_rows_helper(request, emitted_rows):
             yield result
 
     async def _read_rows_helper(self, request, emitted_rows):
-        raise RuntimeError("test")
         merger = RowMerger()
         async for result in await self._gapic_client.read_rows(
             request=request, app_profile_id=self._app_profile_id
         ):
             if merger.has_full_frame():
                 row = merger.pop()
-                print(f"YIELDING: {row.row_key}")
-                yield row
-                # raise RuntimeError("test")
+                if row.row_key not in emitted_rows:
+                    emitted_rows.add(row.row_key)
+                    print(f"YIELDING: {row.row_key}")
+                    yield row
+                    # raise RuntimeError("test")
+                else:
+                    print(f"SKIPPING ROW: {row.row_key}")
             else:
                 merger.push(result)
         # flush remaining rows
