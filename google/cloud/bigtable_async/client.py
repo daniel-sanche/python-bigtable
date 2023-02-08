@@ -99,7 +99,7 @@ class BigtableDataClient(ClientWithProject):
         self._app_profile_id = app_profile_id
         self._gapic_client = BigtableAsyncClient(
             credentials=credentials,
-            # transport="grpc_asyncio_pooled",
+            transport="pooled_grpc_asyncio",
             client_options=client_options,
         )
 

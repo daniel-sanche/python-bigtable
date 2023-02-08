@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 import warnings
-from typing import Awaitable, Callable, Dict, Optional, Sequence, Tuple, Union
+from typing import Awaitable, Callable, Dict, Optional, Sequence, Tuple, Union, List
 
 from google.api_core import gapic_v1
 from google.api_core import grpc_helpers_async
@@ -96,7 +96,7 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
     def __init__(
         self,
         *,
-        pool_size: [Int] = 3,
+        pool_size: int = 3,
         host: str = "bigtable.googleapis.com",
         credentials: Optional[ga_credentials.Credentials] = None,
         credentials_file: Optional[str] = None,
@@ -220,13 +220,12 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
         # Wrap messages. This must be done after self._channel_pool is populated
         self._prep_wrapped_messages(client_info)
 
-    @property
     def next_channel(self) -> aio.Channel:
         """Returns the next channel in the round robin pool."""
         # Return the channel from cache.
         channel = self._channel_pool[self._next_idx]
         self._next_idx = (self._next_idx + 1) % len(self._channel_pool)
-        return chanel
+        return channel
 
     @property
     def read_rows(
@@ -252,6 +251,7 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
         # gRPC handles serialization and deserialization, so we just need
         # to pass in the functions for each.
         next_channel = self.next_channel()
+        print(f"USING CHANNEL: {self._next_idx}")
         stub_key = (next_channel, "read_rows")
         if stub_key not in self._stubs:
             self._stubs[stub_key] = next_channel.unary_stream(
@@ -286,6 +286,7 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
         # gRPC handles serialization and deserialization, so we just need
         # to pass in the functions for each.
         next_channel = self.next_channel()
+        print(f"USING CHANNEL: {self._next_idx}")
         stub_key = (next_channel, "sample_row_keys")
         if stub_key not in self._stubs:
             self._stubs[stub_key] = next_channel.unary_stream(
@@ -315,6 +316,7 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
         # gRPC handles serialization and deserialization, so we just need
         # to pass in the functions for each.
         next_channel = self.next_channel()
+        print(f"USING CHANNEL: {self._next_idx}")
         stub_key = (next_channel, "mutate_row")
         if stub_key not in self._stubs:
             self._stubs[stub_key] = next_channel.unary_unary(
@@ -345,6 +347,7 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
         # gRPC handles serialization and deserialization, so we just need
         # to pass in the functions for each.
         next_channel = self.next_channel()
+        print(f"USING CHANNEL: {self._next_idx}")
         stub_key = (next_channel, "mutate_rows")
         if stub_key not in self._stubs:
             self._stubs[stub_key] = next_channel.unary_stream(
@@ -377,6 +380,7 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
         # gRPC handles serialization and deserialization, so we just need
         # to pass in the functions for each.
         next_channel = self.next_channel()
+        print(f"USING CHANNEL: {self._next_idx}")
         stub_key = (next_channel, "check_and_mutate_row")
         if stub_key not in self._stubs:
             self._stubs[stub_key] = next_channel.unary_unary(
@@ -409,6 +413,7 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
         # gRPC handles serialization and deserialization, so we just need
         # to pass in the functions for each.
         next_channel = self.next_channel()
+        print(f"USING CHANNEL: {self._next_idx}")
         stub_key = (next_channel, "ping_and_warm")
         if stub_key not in self._stubs:
             self._stubs[stub_key] = next_channel.unary_unary(
@@ -446,6 +451,7 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
         # gRPC handles serialization and deserialization, so we just need
         # to pass in the functions for each.
         next_channel = self.next_channel()
+        print(f"USING CHANNEL: {self._next_idx}")
         stub_key = (next_channel, "read_modify_write_row")
         if stub_key not in self._stubs:
             self._stubs[stub_key] = next_channel.unary_unary(
