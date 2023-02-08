@@ -42,6 +42,8 @@ from google.cloud.bigtable_v2.types.data import Mutation
 from google.rpc.status_pb2 import Status
 from google.api_core import exceptions as core_exceptions
 
+from google.api_core import retry_async as retries
+
 if TYPE_CHECKING:
     # import dependencies when type checking
     import requests
@@ -131,7 +133,6 @@ class BigtableDataClient(ClientWithProject):
         """
         Returns a generator to asynchronously stream back row data
         """
-        merger = RowMerger()
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
         )
@@ -151,10 +152,23 @@ class BigtableDataClient(ClientWithProject):
                 "row_ranges": [r.get_range_kwargs for r in row_set.row_ranges],
             }
         emitted_rows = set()
-        async for result in await self._read_rows_helper(request, emitted_rows):
+        def on_error(exc):
+            from time import sleep
+            print(f"RETRYING: {exc}")
+            sleep(5)
+        predicate = retries.if_exception_type(RuntimeError)
+        retry = retries.AsyncRetry(
+            predicate=predicate,
+            deadline=60.0,
+            on_error=on_error,
+        )
+        retryable_fn = retry(self._read_rows_helper)
+        async for result in retryable_fn(request, emitted_rows):
             yield result
 
-    async def _read_rows_helper(request, emitted_rows):
+    async def _read_rows_helper(self, request, emitted_rows):
+        raise RuntimeError("test")
+        merger = RowMerger()
         async for result in await self._gapic_client.read_rows(
             request=request, app_profile_id=self._app_profile_id
         ):
@@ -162,6 +176,7 @@ class BigtableDataClient(ClientWithProject):
                 row = merger.pop()
                 print(f"YIELDING: {row.row_key}")
                 yield row
+                # raise RuntimeError("test")
             else:
                 merger.push(result)
         # flush remaining rows
@@ -173,9 +188,9 @@ class BigtableDataClient(ClientWithProject):
                 yield row
             else:
                 print(f"SKIPPING ROW: {row.row_key}")
-        if merger.has_partial_frame():
-            # read rows is complete, but there's still data in the merger
-            raise RuntimeError("read_rows completed with partial state remaining")
+        # if merger.has_partial_frame():
+        #     # read rows is complete, but there's still data in the merger
+        #     raise RuntimeError("read_rows completed with partial state remaining")
 
     async def mutate_row(
         self,
