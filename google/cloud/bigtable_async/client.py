@@ -161,6 +161,7 @@ class BigtableDataClient(ClientWithProject):
             predicate=predicate,
             deadline=60.0,
             on_error=on_error,
+            generator_target=True
         )
         retryable_fn = retry(self._read_rows_helper)
         async for result in await retryable_fn(request, emitted_rows):
