@@ -65,7 +65,7 @@ class RowMerger:
 
 class StateMachine:
     def __init__(self):
-        self.completed_row_keys:Set[bytes] = set({})
+        self.completed_row_keys: Set[bytes] = set({})
         self.adapter: "RowBuilder" = RowBuilder()
         self.reset()
 
@@ -74,7 +74,7 @@ class StateMachine:
         self.last_cell_data: Dict[str, Any] = {}
         # represents either the last row emitted, or the last_scanned_key sent from backend
         # all future rows should have keys > last_seen_row_key
-        self.last_seen_row_key:Optional[bytes] = None
+        self.last_seen_row_key: Optional[bytes] = None
         # self.expected_cell_size:int = 0
         # self.remaining_cell_bytes:int = 0
         self.complete_row: Optional[PartialRowData] = None
@@ -179,7 +179,10 @@ class AWAITING_NEW_ROW(State):
     def handle_chunk(self, chunk: ReadRowsResponse.CellChunk) -> "State":
         if not chunk.row_key:
             raise InvalidChunk("New row is missing a row key")
-        if self._owner.last_seen_row_key and self._owner.last_seen_row_key >= chunk.row_key.value:
+        if (
+            self._owner.last_seen_row_key
+            and self._owner.last_seen_row_key >= chunk.row_key.value
+        ):
             raise InvalidChunk("Out of order row keys")
         self._owner.adapter.start_row(chunk.row_key)
         # the first chunk signals both the start of a new row and the start of a new cell, so
@@ -201,8 +204,16 @@ class AWAITING_NEW_CELL(State):
         is_split = chunk.value_size > 0
         expected_cell_size = chunk.value_size if is_split else chunk_size
         # unwrap proto values if needed
-        family_name = chunk.family_name.value if isinstance(chunk.family_name, StringValue) else chunk.family_name
-        qualifier = chunk.qualifier.value if isinstance(chunk.qualifier, BytesValue) else chunk.qualifier
+        family_name = (
+            chunk.family_name.value
+            if isinstance(chunk.family_name, StringValue)
+            else chunk.family_name
+        )
+        qualifier = (
+            chunk.qualifier.value
+            if isinstance(chunk.qualifier, BytesValue)
+            else chunk.qualifier
+        )
         # track latest cell data. New chunks won't send repeated data
         if family_name:
             self._owner.last_cell_data["family"] = family_name
@@ -217,7 +228,11 @@ class AWAITING_NEW_CELL(State):
 
         # ensure that all chunks after the first one either are missing a row
         # key or the row is the same
-        if self._owner.adapter.row_in_progress() and chunk.row_key and chunk.row_key != self._owner.adapter.current_key:
+        if (
+            self._owner.adapter.row_in_progress()
+            and chunk.row_key
+            and chunk.row_key != self._owner.adapter.current_key
+        ):
             raise InvalidChunk("row key changed mid row")
 
         self._owner.adapter.start_cell(

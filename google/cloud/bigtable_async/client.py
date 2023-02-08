@@ -153,52 +153,55 @@ class BigtableDataClient(ClientWithProject):
                 "row_ranges": [r.get_range_kwargs for r in row_set.row_ranges],
             }
         emitted_rows = set()
+
         def on_error(exc):
             from time import sleep
+
             print(f"RETRYING: {exc}")
             sleep(5)
+
         predicate = retries.if_exception_type(RuntimeError)
         retry = retries.AsyncRetry(
-            predicate=predicate,
-            deadline=60.0,
-            on_error=on_error,
-            generator_target=True
+            predicate=predicate, deadline=60.0, on_error=on_error, generator_target=True
         )
         retryable_fn = retry(self._read_rows_helper)
         async for result in await retryable_fn(request, emitted_rows):
-        # async for result in self._read_rows_helper(request, emitted_rows):
+            # async for result in self._read_rows_helper(request, emitted_rows):
             yield result
 
-    def _revise_rowset_for_already_seen(self, row_set:Optional[Dict[str,Any]], emitted_rows:Set[bytes]) -> Dict[str, Any]:
+    def _revise_rowset_for_already_seen(
+        self, row_set: Optional[Dict[str, Any]], emitted_rows: Set[bytes]
+    ) -> Dict[str, Any]:
         # if user is doing a whole table scan, start a new one with the last seen key
         if row_set is None:
             last_seen = max(emitted_rows)
             return {
                 "row_keys": [],
-                "row_ranges": [{"start_key_open":last_seen}],
+                "row_ranges": [{"start_key_open": last_seen}],
             }
         else:
             # remove seen keys from user-specific key list
-            row_keys:List[bytes] = row_set.get("row_keys", [])
+            row_keys: List[bytes] = row_set.get("row_keys", [])
             adjusted_keys = []
             for key in row_keys:
                 if key not in emitted_rows:
                     adjusted_keys.append(key)
             # if user specified only a single range, set start to the last seen key
-            row_ranges:List[Dict[str,Any]] = row_set.get("row_ranges", [])
+            row_ranges: List[Dict[str, Any]] = row_set.get("row_ranges", [])
             if len(row_keys) == 0 and len(row_ranges) == 1:
-                row_ranges[0]["start_key_open"] =  max(emitted_rows)
+                row_ranges[0]["start_key_open"] = max(emitted_rows)
                 if "start_key_closed" in row_ranges[0]:
                     row_ranges[0].pop("start_key_closed")
-            return {
-                "row_keys": adjusted_keys,
-                "row_ranges": row_ranges
-            }
+            return {"row_keys": adjusted_keys, "row_ranges": row_ranges}
 
-    async def _read_rows_helper(self, request:Dict[str,Any], emitted_rows:Set[bytes]):
+    async def _read_rows_helper(
+        self, request: Dict[str, Any], emitted_rows: Set[bytes]
+    ):
         if len(emitted_rows) > 0:
             # if this is a retry, try to trim down the request to avoid ones we've already processed
-            request["rows"] = self._revise_rowset_for_already_seen(request.get("rows",None), emitted_rows)
+            request["rows"] = self._revise_rowset_for_already_seen(
+                request.get("rows", None), emitted_rows
+            )
         merger = RowMerger()
         async for result in await self._gapic_client.read_rows(
             request=request, app_profile_id=self._app_profile_id
@@ -360,7 +363,7 @@ class BigtableDataClient(ClientWithProject):
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
         )
         value_arr = increment_amounts if increment_amounts else append_values
-        value_arr = cast(Union[List[bytes],List[int]], value_arr)
+        value_arr = cast(Union[List[bytes], List[int]], value_arr)
         value_label = "increment_amount" if increment_amounts else "append_value"
         if len(family_names) != len(column_qualifiers) or len(family_names) != len(
             value_arr

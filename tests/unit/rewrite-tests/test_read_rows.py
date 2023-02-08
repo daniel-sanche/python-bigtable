@@ -77,9 +77,7 @@ def test_scenario(test_case: ReadRowsTest):
         if merger.has_partial_frame():
             raise InvalidChunk("merger has partial frame after reading")
     except InvalidChunk as e:
-        results.append(
-            ReadRowsTest.Result(error=True)
-        )
+        results.append(ReadRowsTest.Result(error=True))
     for expected, actual in zip_longest(test_case.results, results):
         assert actual == expected
     # def fake_read(*args, **kwargs):
@@ -93,13 +91,13 @@ def test_scenario(test_case: ReadRowsTest):
     # breakpoint()
 
 
-
 def test_out_of_order_rows():
     merger = RowMerger()
-    merger.state_machine.last_seen_row_key = b'a'
+    merger.state_machine.last_seen_row_key = b"a"
     req = ReadRowsResponse(last_scanned_row_key=b"a")
     with pytest.raises(InvalidChunk):
         merger.push(req)
+
 
 def test_bare_reset():
     first_chunk = ReadRowsResponse.CellChunk(
