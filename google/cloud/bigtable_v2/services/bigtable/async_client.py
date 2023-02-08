@@ -229,6 +229,33 @@ class BigtableAsyncClient:
         each row will still be preserved. See the
         ReadRowsResponse documentation for details.
 
+        .. code-block:: python
+
+            # This snippet has been automatically generated and should be regarded as a
+            # code template only.
+            # It will require modifications to work:
+            # - It may require correct/in-range values for request initialization.
+            # - It may require specifying regional endpoints when creating the service
+            #   client as shown in:
+            #   https://googleapis.dev/python/google-api-core/latest/client_options.html
+            from google import bigtable_v2
+
+            async def sample_read_rows():
+                # Create a client
+                client = bigtable_v2.BigtableAsyncClient()
+
+                # Initialize request argument(s)
+                request = bigtable_v2.ReadRowsRequest(
+                    table_name="table_name_value",
+                )
+
+                # Make the request
+                stream = await client.read_rows(request=request)
+
+                # Handle the response
+                async for response in stream:
+                    print(response)
+
         Args:
             request (Optional[Union[google.cloud.bigtable_v2.types.ReadRowsRequest, dict]]):
                 The request object. Request message for
@@ -283,7 +310,7 @@ class BigtableAsyncClient:
         # and friendly error handling.
         rpc = gapic_v1.method_async.wrap_method(
             self._client._transport.read_rows,
-            default_timeout=43200.0,
+            default_timeout=None,
             client_info=DEFAULT_CLIENT_INFO,
         )
 
@@ -321,6 +348,33 @@ class BigtableAsyncClient:
         the table of approximately equal size, which can be used
         to break up the data for distributed tasks like
         mapreduces.
+
+        .. code-block:: python
+
+            # This snippet has been automatically generated and should be regarded as a
+            # code template only.
+            # It will require modifications to work:
+            # - It may require correct/in-range values for request initialization.
+            # - It may require specifying regional endpoints when creating the service
+            #   client as shown in:
+            #   https://googleapis.dev/python/google-api-core/latest/client_options.html
+            from google import bigtable_v2
+
+            async def sample_sample_row_keys():
+                # Create a client
+                client = bigtable_v2.BigtableAsyncClient()
+
+                # Initialize request argument(s)
+                request = bigtable_v2.SampleRowKeysRequest(
+                    table_name="table_name_value",
+                )
+
+                # Make the request
+                stream = await client.sample_row_keys(request=request)
+
+                # Handle the response
+                async for response in stream:
+                    print(response)
 
         Args:
             request (Optional[Union[google.cloud.bigtable_v2.types.SampleRowKeysRequest, dict]]):
@@ -378,7 +432,7 @@ class BigtableAsyncClient:
         # and friendly error handling.
         rpc = gapic_v1.method_async.wrap_method(
             self._client._transport.sample_row_keys,
-            default_timeout=60.0,
+            default_timeout=None,
             client_info=DEFAULT_CLIENT_INFO,
         )
 
@@ -415,6 +469,33 @@ class BigtableAsyncClient:
     ) -> bigtable.MutateRowResponse:
         r"""Mutates a row atomically. Cells already present in the row are
         left unchanged unless explicitly changed by ``mutation``.
+
+        .. code-block:: python
+
+            # This snippet has been automatically generated and should be regarded as a
+            # code template only.
+            # It will require modifications to work:
+            # - It may require correct/in-range values for request initialization.
+            # - It may require specifying regional endpoints when creating the service
+            #   client as shown in:
+            #   https://googleapis.dev/python/google-api-core/latest/client_options.html
+            from google import bigtable_v2
+
+            async def sample_mutate_row():
+                # Create a client
+                client = bigtable_v2.BigtableAsyncClient()
+
+                # Initialize request argument(s)
+                request = bigtable_v2.MutateRowRequest(
+                    table_name="table_name_value",
+                    row_key=b'row_key_blob',
+                )
+
+                # Make the request
+                response = await client.mutate_row(request=request)
+
+                # Handle the response
+                print(response)
 
         Args:
             request (Optional[Union[google.cloud.bigtable_v2.types.MutateRowRequest, dict]]):
@@ -494,17 +575,7 @@ class BigtableAsyncClient:
         # and friendly error handling.
         rpc = gapic_v1.method_async.wrap_method(
             self._client._transport.mutate_row,
-            default_retry=retries.Retry(
-                initial=0.01,
-                maximum=60.0,
-                multiplier=2,
-                predicate=retries.if_exception_type(
-                    core_exceptions.DeadlineExceeded,
-                    core_exceptions.ServiceUnavailable,
-                ),
-                deadline=60.0,
-            ),
-            default_timeout=60.0,
+            default_timeout=None,
             client_info=DEFAULT_CLIENT_INFO,
         )
 
@@ -541,6 +612,33 @@ class BigtableAsyncClient:
         r"""Mutates multiple rows in a batch. Each individual row
         is mutated atomically as in MutateRow, but the entire
         batch is not executed atomically.
+
+        .. code-block:: python
+
+            # This snippet has been automatically generated and should be regarded as a
+            # code template only.
+            # It will require modifications to work:
+            # - It may require correct/in-range values for request initialization.
+            # - It may require specifying regional endpoints when creating the service
+            #   client as shown in:
+            #   https://googleapis.dev/python/google-api-core/latest/client_options.html
+            from google import bigtable_v2
+
+            async def sample_mutate_rows():
+                # Create a client
+                client = bigtable_v2.BigtableAsyncClient()
+
+                # Initialize request argument(s)
+                request = bigtable_v2.MutateRowsRequest(
+                    table_name="table_name_value",
+                )
+
+                # Make the request
+                stream = await client.mutate_rows(request=request)
+
+                # Handle the response
+                async for response in stream:
+                    print(response)
 
         Args:
             request (Optional[Union[google.cloud.bigtable_v2.types.MutateRowsRequest, dict]]):
@@ -614,7 +712,7 @@ class BigtableAsyncClient:
         # and friendly error handling.
         rpc = gapic_v1.method_async.wrap_method(
             self._client._transport.mutate_rows,
-            default_timeout=600.0,
+            default_timeout=None,
             client_info=DEFAULT_CLIENT_INFO,
         )
 
@@ -653,6 +751,33 @@ class BigtableAsyncClient:
     ) -> bigtable.CheckAndMutateRowResponse:
         r"""Mutates a row atomically based on the output of a
         predicate Reader filter.
+
+        .. code-block:: python
+
+            # This snippet has been automatically generated and should be regarded as a
+            # code template only.
+            # It will require modifications to work:
+            # - It may require correct/in-range values for request initialization.
+            # - It may require specifying regional endpoints when creating the service
+            #   client as shown in:
+            #   https://googleapis.dev/python/google-api-core/latest/client_options.html
+            from google import bigtable_v2
+
+            async def sample_check_and_mutate_row():
+                # Create a client
+                client = bigtable_v2.BigtableAsyncClient()
+
+                # Initialize request argument(s)
+                request = bigtable_v2.CheckAndMutateRowRequest(
+                    table_name="table_name_value",
+                    row_key=b'row_key_blob',
+                )
+
+                # Make the request
+                response = await client.check_and_mutate_row(request=request)
+
+                # Handle the response
+                print(response)
 
         Args:
             request (Optional[Union[google.cloud.bigtable_v2.types.CheckAndMutateRowRequest, dict]]):
@@ -768,7 +893,7 @@ class BigtableAsyncClient:
         # and friendly error handling.
         rpc = gapic_v1.method_async.wrap_method(
             self._client._transport.check_and_mutate_row,
-            default_timeout=20.0,
+            default_timeout=None,
             client_info=DEFAULT_CLIENT_INFO,
         )
 
@@ -804,6 +929,32 @@ class BigtableAsyncClient:
         r"""Warm up associated instance metadata for this
         connection. This call is not required but may be useful
         for connection keep-alive.
+
+        .. code-block:: python
+
+            # This snippet has been automatically generated and should be regarded as a
+            # code template only.
+            # It will require modifications to work:
+            # - It may require correct/in-range values for request initialization.
+            # - It may require specifying regional endpoints when creating the service
+            #   client as shown in:
+            #   https://googleapis.dev/python/google-api-core/latest/client_options.html
+            from google import bigtable_v2
+
+            async def sample_ping_and_warm():
+                # Create a client
+                client = bigtable_v2.BigtableAsyncClient()
+
+                # Initialize request argument(s)
+                request = bigtable_v2.PingAndWarmRequest(
+                    name="name_value",
+                )
+
+                # Make the request
+                response = await client.ping_and_warm(request=request)
+
+                # Handle the response
+                print(response)
 
         Args:
             request (Optional[Union[google.cloud.bigtable_v2.types.PingAndWarmRequest, dict]]):
@@ -903,6 +1054,37 @@ class BigtableAsyncClient:
         or the current server time. The method returns the new
         contents of all modified cells.
 
+        .. code-block:: python
+
+            # This snippet has been automatically generated and should be regarded as a
+            # code template only.
+            # It will require modifications to work:
+            # - It may require correct/in-range values for request initialization.
+            # - It may require specifying regional endpoints when creating the service
+            #   client as shown in:
+            #   https://googleapis.dev/python/google-api-core/latest/client_options.html
+            from google import bigtable_v2
+
+            async def sample_read_modify_write_row():
+                # Create a client
+                client = bigtable_v2.BigtableAsyncClient()
+
+                # Initialize request argument(s)
+                rules = bigtable_v2.ReadModifyWriteRule()
+                rules.append_value = b'append_value_blob'
+
+                request = bigtable_v2.ReadModifyWriteRowRequest(
+                    table_name="table_name_value",
+                    row_key=b'row_key_blob',
+                    rules=rules,
+                )
+
+                # Make the request
+                response = await client.read_modify_write_row(request=request)
+
+                # Handle the response
+                print(response)
+
         Args:
             request (Optional[Union[google.cloud.bigtable_v2.types.ReadModifyWriteRowRequest, dict]]):
                 The request object. Request message for
@@ -983,7 +1165,7 @@ class BigtableAsyncClient:
         # and friendly error handling.
         rpc = gapic_v1.method_async.wrap_method(
             self._client._transport.read_modify_write_row,
-            default_timeout=20.0,
+            default_timeout=None,
             client_info=DEFAULT_CLIENT_INFO,
         )
 
