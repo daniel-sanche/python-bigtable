@@ -24,6 +24,7 @@ from typing import (
     Dict,
     List,
     Tuple,
+    Set,
     Any,
     AsyncIterable,
     TYPE_CHECKING,
@@ -168,7 +169,36 @@ class BigtableDataClient(ClientWithProject):
         # async for result in self._read_rows_helper(request, emitted_rows):
             yield result
 
-    async def _read_rows_helper(self, request, emitted_rows):
+    def _revise_rowset_for_already_seen(self, row_set:Optional[Dict[str,Any]], emitted_rows:Set[bytes]) -> Dict[str, Any]:
+        # if user is doing a whole table scan, start a new one with the last seen key
+        if row_set is None:
+            last_seen = max(emitted_rows)
+            return {
+                "row_keys": [],
+                "row_ranges": [{"start_key_open":last_seen}],
+            }
+        else:
+            # remove seen keys from user-specific key list
+            row_keys:List[bytes] = row_set.get("row_keys", [])
+            adjusted_keys = []
+            for key in row_keys:
+                if key not in emitted_rows:
+                    adjusted_keys.append(key)
+            # if user specified only a single range, set start to the last seen key
+            row_ranges:List[Dict[str,Any]] = row_set.get("row_ranges", [])
+            if len(row_keys) == 0 and len(row_ranges) == 1:
+                row_ranges[0]["start_key_open"] =  max(emitted_rows)
+                if "start_key_closed" in row_ranges[0]:
+                    row_ranges[0].pop("start_key_closed")
+            return {
+                "row_keys": adjusted_keys,
+                "row_ranges": row_ranges
+            }
+
+    async def _read_rows_helper(self, request:Dict[str,Any], emitted_rows:Set[bytes]):
+        if len(emitted_rows) > 0:
+            # if this is a retry, try to trim down the request to avoid ones we've already processed
+            request["rows"] = self._revise_rowset_for_already_seen(request.get("rows",None), emitted_rows)
         merger = RowMerger()
         async for result in await self._gapic_client.read_rows(
             request=request, app_profile_id=self._app_profile_id
@@ -179,7 +209,7 @@ class BigtableDataClient(ClientWithProject):
                     emitted_rows.add(row.row_key)
                     print(f"YIELDING: {row.row_key}")
                     yield row
-                    # raise RuntimeError("test")
+                    raise RuntimeError("test")
                 else:
                     print(f"SKIPPING ROW: {row.row_key}")
             else:
