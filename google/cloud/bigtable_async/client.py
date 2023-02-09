@@ -27,6 +27,7 @@ from typing import (
     Set,
     Any,
     AsyncIterable,
+    AsyncGenerator,
     TYPE_CHECKING,
 )
 
@@ -35,7 +36,7 @@ from google.cloud.bigtable_v2.services.bigtable.async_client import BigtableAsyn
 from google.cloud.bigtable.row_filters import RowFilter
 from google.cloud.bigtable.row_set import RowRange, RowSet
 from google.cloud.bigtable.row_data import PartialCellData
-from google.cloud.bigtable.row import Row
+from google.cloud.bigtable.row import Row, PartialRowData
 
 from google.cloud.bigtable_async.row_merger import RowMerger
 from google.cloud.bigtable_v2.types.data import Mutation
@@ -106,7 +107,7 @@ class BigtableDataClient(ClientWithProject):
             client_options=client_options,
         )
 
-    def read_rows(self, table_id: str, **kwargs) -> List[Row]:
+    def read_rows(self, table_id: str, **kwargs) -> List[PartialRowData]:
         """
         Synchronously returns a list of data obtained from a row query
         """
@@ -114,7 +115,7 @@ class BigtableDataClient(ClientWithProject):
         result = loop.run_until_complete(self.read_rows_async(table_id, **kwargs))
         return result
 
-    async def read_rows_async(self, table_id: str, **kwargs) -> List[Row]:
+    async def read_rows_async(self, table_id: str, **kwargs) -> List[PartialRowData]:
         """
         Returns a list of data obtained from a row query
         """
@@ -131,7 +132,7 @@ class BigtableDataClient(ClientWithProject):
         row_ranges: Optional[List[RowRange]] = None,
         row_filter: Optional[RowFilter] = None,
         timeout: float = 60.0,
-    ) -> AsyncIterable[Row]:
+    ) -> AsyncGenerator[PartialRowData, None]:
         """
         Returns a generator to asynchronously stream back row data
         """
@@ -167,7 +168,27 @@ class BigtableDataClient(ClientWithProject):
         async for result in await retryable_fn(request, emitted_rows):
             yield result
 
-    def _revise_rowset_for_already_seen(
+    async def _read_rows_helper(
+        self, request: Dict[str, Any], emitted_rows: Set[bytes], timeout=60.0, revise_request_on_retry=True,
+    ) -> AsyncGenerator[PartialRowData, None]:
+        if revise_request_on_retry and len(emitted_rows) > 0:
+            # if this is a retry, try to trim down the request to avoid ones we've already processed
+            request["rows"] = self._revise_rowset(
+                request.get("rows", None), emitted_rows
+            )
+        merger = RowMerger()
+        generator = merger.parse_requests(self._gapic_client.read_rows(
+            request=request, app_profile_id=self._app_profile_id, timeout=timeout
+        ))
+        async for row in generator:
+            if row.row_key not in emitted_rows:
+                emitted_rows.add(row.row_key)
+                print(f"YIELDING: {row.row_key}")
+                yield row
+            else:
+                print(f"SKIPPING ROW: {row.row_key}")
+
+    def _revise_rowset(
         self, row_set: Optional[Dict[str, Any]], emitted_rows: Set[bytes]
     ) -> Dict[str, Any]:
         # if user is doing a whole table scan, start a new one with the last seen key
@@ -191,26 +212,6 @@ class BigtableDataClient(ClientWithProject):
                 if "start_key_closed" in row_ranges[0]:
                     row_ranges[0].pop("start_key_closed")
             return {"row_keys": adjusted_keys, "row_ranges": row_ranges}
-
-    async def _read_rows_helper(
-        self, request: Dict[str, Any], emitted_rows: Set[bytes], timeout=60.0
-    ):
-        if len(emitted_rows) > 0:
-            # if this is a retry, try to trim down the request to avoid ones we've already processed
-            request["rows"] = self._revise_rowset_for_already_seen(
-                request.get("rows", None), emitted_rows
-            )
-        merger = RowMerger()
-        generator = merger.parse_requests(self._gapic_client.read_rows(
-            request=request, app_profile_id=self._app_profile_id, timeout=timeout
-        ))
-        async for row in generator:
-            if row.row_key not in emitted_rows:
-                emitted_rows.add(row.row_key)
-                print(f"YIELDING: {row.row_key}")
-                yield row
-            else:
-                print(f"SKIPPING ROW: {row.row_key}")
 
     async def mutate_row(
         self,

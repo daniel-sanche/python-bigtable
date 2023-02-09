@@ -31,6 +31,7 @@ class RowMerger:
         self.merged_rows: Deque[PartialRowData] = deque([])
         self.state_machine: StateMachine = StateMachine()
         self.cache: asyncio.Queue[PartialRowData] = asyncio.Queue()
+        # TODO: combine cache and merged_rows, make this class a generator?
 
     async def _consume_stream(self, request_gen:Awaitable[AsyncIterable[ReadRowsResponse]]):
         """
