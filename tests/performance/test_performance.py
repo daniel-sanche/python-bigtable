@@ -29,6 +29,9 @@ from google.cloud.bigtable_async import BigtableDataClient
 from google.cloud.bigtable_v2.services.bigtable.async_client import BigtableAsyncClient
 from google.cloud.bigtable_v2.services.bigtable.client import BigtableClientMeta
 
+from google.cloud.bigtable_v2 import ReadRowsResponse
+from google.cloud.bigtable_async.row_merger import RowMerger
+
 class MockGRPCTransport(PooledBigtableGrpcAsyncIOTransport):
     """
     Mock for grpc transport.
@@ -136,3 +139,31 @@ class TestPerformance(unittest.TestCase):
         total_time = self._print_results(pr, results, time_limit, "Client Init")
         self.assertLessEqual(total_time, time_limit)
 
+
+    def test_row_merge(self, time_limit=12):
+        results = []
+        pr = cProfile.Profile()
+
+        chunks = [
+            ReadRowsResponse.CellChunk(
+                row_key=str(i).encode(), family_name="A", qualifier=b"Qw==", value=b"dmFsdWUtVkFM", commit_row=True
+            ) for i in range(1000)
+        ]
+
+        def profiled_code():
+            req = ReadRowsResponse.pb(ReadRowsResponse(chunks=chunks))
+            merger = RowMerger()
+            merger.push(req)
+
+        exec_time, _ = instrument_function(profiler=pr)(
+            profiled_code
+        )
+        result_dict = {
+            "exec_time": exec_time,
+        }
+        results.append(result_dict)
+        # print results dataframe
+        total_time = self._print_results(
+            pr, results, time_limit, "Row Merger"
+        )
+        self.assertLessEqual(total_time, time_limit)
