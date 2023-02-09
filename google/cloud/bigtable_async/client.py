@@ -171,13 +171,17 @@ class BigtableDataClient(ClientWithProject):
     async def _read_rows_helper(
         self, request: Dict[str, Any], emitted_rows: Set[bytes], timeout=60.0, revise_request_on_retry=True,
     ) -> AsyncGenerator[PartialRowData, None]:
+        """
+        Block of code that is retried if an exception is thrown during read_rows
+        emitted_rows state is kept, to avoid emitting duplicates
+        The input request is also modified between requests to avoid repeat rows where possible
+        """
         if revise_request_on_retry and len(emitted_rows) > 0:
             # if this is a retry, try to trim down the request to avoid ones we've already processed
             request["rows"] = self._revise_rowset(
                 request.get("rows", None), emitted_rows
             )
-        merger = RowMerger()
-        generator = merger.parse_requests(self._gapic_client.read_rows(
+        generator = RowMerger(self._gapic_client.read_rows(
             request=request, app_profile_id=self._app_profile_id, timeout=timeout
         ))
         async for row in generator:

@@ -27,11 +27,28 @@ from typing import cast, Deque, Optional, List, Dict, Set, Any, AsyncIterable, A
 
 
 class RowMerger:
-    def __init__(self):
+    def __init__(self, request_generator:Optional[Awaitable[AsyncIterable[ReadRowsResponse]]]=None):
         self.merged_rows: Deque[PartialRowData] = deque([])
         self.state_machine: StateMachine = StateMachine()
         self.cache: asyncio.Queue[PartialRowData] = asyncio.Queue()
-        # TODO: combine cache and merged_rows, make this class a generator?
+        if request_generator:
+            # TODO: make class fyllu async; make generator manditory; combine cache and merge_rows
+            # need to update unit tests for that to work
+            self.task = asyncio.create_task(self._consume_stream(request_generator))
+
+    def __aiter__(self):
+        # mark self as async iterator
+        return self
+
+    async def __anext__(self):
+        # yield results from the queue as they come
+        if not self.task.done() or not self.cache.empty():
+            return await self.cache.get()
+        # read complete. Rasie exception if any
+        if self.task.exception():
+            raise cast(Exception, self.task.exception())
+        # task complete with no errors
+        raise StopAsyncIteration
 
     async def _consume_stream(self, request_gen:Awaitable[AsyncIterable[ReadRowsResponse]]):
         """
@@ -50,18 +67,8 @@ class RowMerger:
             await self.cache.put(row)
         if self.has_partial_frame():
             # read rows is complete, but there's still data in the merger
+            # TODO: change type
             raise RuntimeError("read_rows completed with partial state remaining")
-
-    async def parse_requests(self, request_gen:Awaitable[AsyncIterable[ReadRowsResponse]]) -> AsyncGenerator[PartialRowData, None]:
-        # start consumption as a background task
-        task = asyncio.create_task(self._consume_stream(request_gen))
-        # yield results from the queue as they come
-        while not task.done() or not self.cache.empty():
-            result = await self.cache.get()
-            yield result
-        # read complete. Rasie exception if any
-        if task.exception():
-            raise cast(Exception, task.exception())
 
     def push(self, new_data: ReadRowsResponse):
         if not isinstance(new_data, ReadRowsResponse):
