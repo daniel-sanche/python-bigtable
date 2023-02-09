@@ -139,29 +139,31 @@ class TestPerformance(unittest.TestCase):
         total_time = self._print_results(pr, results, time_limit, "Client Init")
         self.assertLessEqual(total_time, time_limit)
 
+    def _create_request(self, rows=1000, payload_size=10):
+        chunks = [
+            ReadRowsResponse.CellChunk(
+                row_key=str(i).encode(), family_name="A", qualifier=b"Qw==", value=("a"*int(payload_size)).encode(), commit_row=True
+            ) for i in range(rows)
+        ]
+        req = ReadRowsResponse.pb(ReadRowsResponse(chunks=chunks))
+        return req
 
-    def test_row_merge(self, time_limit=12):
+    def test_row_merge(self, time_limit=60):
         results = []
         pr = cProfile.Profile()
 
-        chunks = [
-            ReadRowsResponse.CellChunk(
-                row_key=str(i).encode(), family_name="A", qualifier=b"Qw==", value=b"dmFsdWUtVkFM", commit_row=True
-            ) for i in range(1000)
-        ]
-
-        def profiled_code():
-            req = ReadRowsResponse.pb(ReadRowsResponse(chunks=chunks))
+        def profiled_code(req):
             merger = RowMerger()
             merger.push(req)
 
-        exec_time, _ = instrument_function(profiler=pr)(
-            profiled_code
-        )
-        result_dict = {
-            "exec_time": exec_time,
-        }
-        results.append(result_dict)
+        for num_rows in [100, 1000, 5000]:
+            for payload_size in [0, 1e3, 1e5]:
+                request = self._create_request(num_rows, payload_size)
+                exec_time, _ = instrument_function(request, profiler=pr)(
+                    profiled_code
+                )
+                result_dict = {"num_rows": num_rows, "row_size":payload_size, "exec_time": exec_time}
+                results.append(result_dict)
         # print results dataframe
         total_time = self._print_results(
             pr, results, time_limit, "Row Merger"
