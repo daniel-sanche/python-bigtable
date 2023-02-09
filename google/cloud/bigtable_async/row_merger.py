@@ -28,12 +28,9 @@ from typing import cast, Deque, Optional, List, Dict, Set, Any, AsyncIterable, A
 
 class RowMerger:
     def __init__(self, request_generator:Optional[Awaitable[AsyncIterable[ReadRowsResponse]]]=None):
-        self.merged_rows: Deque[PartialRowData] = deque([])
         self.state_machine: StateMachine = StateMachine()
         self.cache: asyncio.Queue[PartialRowData] = asyncio.Queue()
         if request_generator:
-            # TODO: make class fyllu async; make generator manditory; combine cache and merge_rows
-            # need to update unit tests for that to work
             self.task = asyncio.create_task(self._consume_stream(request_generator))
 
     def __aiter__(self):
@@ -41,14 +38,27 @@ class RowMerger:
         return self
 
     async def __anext__(self):
-        # yield results from the queue as they come
-        if not self.task.done() or not self.cache.empty():
-            return await self.cache.get()
-        # read complete. Rasie exception if any
-        if self.task.exception():
-            raise cast(Exception, self.task.exception())
-        # task complete with no errors
-        raise StopAsyncIteration
+        # if there are waiting items, return one
+        if not self.cache.empty():
+            return self.cache.get_nowait()
+        # no waiting tasks
+        # wait for either the task to finish, or a new item to enter the cache
+        get_from_cache = asyncio.create_task(self.cache.get())
+        await asyncio.wait(
+            [self.task, get_from_cache],
+            return_when=asyncio.FIRST_COMPLETED)
+        # if a new item was put in the cache, return that
+        if get_from_cache.done():
+            return get_from_cache.result()
+        # if the task was complete with an exception, raise the exception
+        elif self.task.done():
+            if self.task.exception():
+                raise cast(Exception, self.task.exception())
+            else:
+                # task completed successfully
+                raise StopAsyncIteration
+        else:
+            raise RuntimeError("expected either new item or stream completion")
 
     async def _consume_stream(self, request_gen:Awaitable[AsyncIterable[ReadRowsResponse]]):
         """
@@ -57,14 +67,7 @@ class RowMerger:
         consumption
         """
         async for request in await request_gen:
-            while self.has_full_frame():
-                row = self.pop()
-                await self.cache.put(row)
             self.push(request)
-        # flush remaining rows
-        while self.has_full_frame():
-            row = self.pop()
-            await self.cache.put(row)
         if self.has_partial_frame():
             # read rows is complete, but there's still data in the merger
             # TODO: change type
@@ -78,31 +81,31 @@ class RowMerger:
         if last_scanned:
             self.state_machine.handle_last_scanned_row(last_scanned)
             if self.state_machine.has_complete_row():
-                self.merged_rows.append(self.state_machine.consume_row())
+                self.cache.put_nowait(self.state_machine.consume_row())
         # process new chunks through the state machine.
         for chunk in new_data.chunks:
             self.state_machine.handle_chunk(chunk)
             if self.state_machine.has_complete_row():
-                self.merged_rows.append(self.state_machine.consume_row())
+                self.cache.put_nowait(self.state_machine.consume_row())
 
     def has_full_frame(self) -> bool:
         """
-        one or more rows are ready and waiting to be consumed
+        Indicates whether there is a row ready to consume
         """
-        return bool(self.merged_rows)
+        return not self.cache.empty()
 
     def has_partial_frame(self) -> bool:
         """
         Returns true if the merger still has ongoing state
         By the end of the process, there should be no partial state
         """
-        return self.has_full_frame() or self.state_machine.is_row_in_progress()
+        return self.state_machine.is_row_in_progress()
 
     def pop(self) -> PartialRowData:
         """
         Return a row out of the cache of waiting rows
         """
-        return self.merged_rows.popleft()
+        return self.cache.get_nowait()
 
 
 class StateMachine:
