@@ -26,12 +26,50 @@ from typing import cast, Deque, Optional, List, Dict, Set, Any, AsyncIterable, A
 # https://github.com/googleapis/java-bigtable/blob/8b120de58f0dfba3573ab696fb0e5375e917a00e/google-cloud-bigtable/src/main/java/com/google/cloud/bigtable/data/v2/stub/readrows/RowMerger.java
 
 
+
 class RowMerger:
-    def __init__(self, request_generator:Optional[Awaitable[AsyncIterable[ReadRowsResponse]]]=None):
+    def __init__(self):
         self.state_machine: StateMachine = StateMachine()
         self.cache: asyncio.Queue[PartialRowData] = asyncio.Queue()
-        if request_generator:
-            self.task = asyncio.create_task(self._consume_stream(request_generator))
+
+    def push(self, new_data: ReadRowsResponse):
+        if not isinstance(new_data, ReadRowsResponse):
+            new_data = ReadRowsResponse(new_data)  #type: ignore
+        last_scanned = new_data.last_scanned_row_key
+        # if the server sends a scan heartbeat, notify the state machine.
+        if last_scanned:
+            self.state_machine.handle_last_scanned_row(last_scanned)
+            if self.state_machine.has_complete_row():
+                self.cache.put_nowait(self.state_machine.consume_row())
+        # process new chunks through the state machine.
+        for chunk in new_data.chunks:
+            self.state_machine.handle_chunk(chunk)
+            if self.state_machine.has_complete_row():
+                self.cache.put_nowait(self.state_machine.consume_row())
+
+    def has_full_frame(self) -> bool:
+        """
+        Indicates whether there is a row ready to consume
+        """
+        return not self.cache.empty()
+
+    def has_partial_frame(self) -> bool:
+        """
+        Returns true if the merger still has ongoing state
+        By the end of the process, there should be no partial state
+        """
+        return self.state_machine.is_row_in_progress()
+
+    def pop(self) -> PartialRowData:
+        """
+        Return a row out of the cache of waiting rows
+        """
+        return self.cache.get_nowait()
+
+class RowMergerIterator(RowMerger):
+    def __init__(self, request_generator:Awaitable[AsyncIterable[ReadRowsResponse]]):
+        super().__init__()
+        self.task = asyncio.create_task(self._consume_stream(request_generator))
 
     def __aiter__(self):
         # mark self as async iterator
@@ -72,41 +110,6 @@ class RowMerger:
             # read rows is complete, but there's still data in the merger
             # TODO: change type
             raise RuntimeError("read_rows completed with partial state remaining")
-
-    def push(self, new_data: ReadRowsResponse):
-        if not isinstance(new_data, ReadRowsResponse):
-            new_data = ReadRowsResponse(new_data)  #type: ignore
-        last_scanned = new_data.last_scanned_row_key
-        # if the server sends a scan heartbeat, notify the state machine.
-        if last_scanned:
-            self.state_machine.handle_last_scanned_row(last_scanned)
-            if self.state_machine.has_complete_row():
-                self.cache.put_nowait(self.state_machine.consume_row())
-        # process new chunks through the state machine.
-        for chunk in new_data.chunks:
-            self.state_machine.handle_chunk(chunk)
-            if self.state_machine.has_complete_row():
-                self.cache.put_nowait(self.state_machine.consume_row())
-
-    def has_full_frame(self) -> bool:
-        """
-        Indicates whether there is a row ready to consume
-        """
-        return not self.cache.empty()
-
-    def has_partial_frame(self) -> bool:
-        """
-        Returns true if the merger still has ongoing state
-        By the end of the process, there should be no partial state
-        """
-        return self.state_machine.is_row_in_progress()
-
-    def pop(self) -> PartialRowData:
-        """
-        Return a row out of the cache of waiting rows
-        """
-        return self.cache.get_nowait()
-
 
 class StateMachine:
     def __init__(self):

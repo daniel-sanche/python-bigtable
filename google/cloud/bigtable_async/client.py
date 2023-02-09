@@ -38,7 +38,7 @@ from google.cloud.bigtable.row_set import RowRange, RowSet
 from google.cloud.bigtable.row_data import PartialCellData
 from google.cloud.bigtable.row import Row, PartialRowData
 
-from google.cloud.bigtable_async.row_merger import RowMerger
+from google.cloud.bigtable_async.row_merger import RowMergerIterator
 from google.cloud.bigtable_v2.types.data import Mutation
 
 from google.rpc.status_pb2 import Status
@@ -181,7 +181,7 @@ class BigtableDataClient(ClientWithProject):
             request["rows"] = self._revise_rowset(
                 request.get("rows", None), emitted_rows
             )
-        generator = RowMerger(self._gapic_client.read_rows(
+        generator = RowMergerIterator(self._gapic_client.read_rows(
             request=request, app_profile_id=self._app_profile_id, timeout=timeout
         ))
         async for row in generator:
