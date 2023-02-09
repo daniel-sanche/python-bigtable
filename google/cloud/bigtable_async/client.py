@@ -65,6 +65,7 @@ class BigtableDataClient(ClientWithProject):
         client_options: Optional[
             Union[Dict[str, Any], "google.api_core.client_options.ClientOptions"]
         ] = None,
+        transport: Optional[Union[str, "BigtableTransport"]] = None,
     ):
         """
         Args:
@@ -103,7 +104,7 @@ class BigtableDataClient(ClientWithProject):
         self._app_profile_id = app_profile_id
         self._gapic_client = BigtableAsyncClient(
             credentials=credentials,
-            transport="pooled_grpc_asyncio",
+            transport="pooled_grpc_asyncio" if not transport else transport,
             client_options=client_options,
         )
 
