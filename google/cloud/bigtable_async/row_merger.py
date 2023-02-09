@@ -31,6 +31,22 @@ class RowMerger:
         self.state_machine = StateMachine()
 
     def push(self, new_data: ReadRowsResponse):
+        # unwrap proto values if needed
+        new_data.row_key = (
+            new_data.row_key.value
+            if isinstance(new_data.row_key, BytesValue)
+            else new_data.row_key
+        )
+        new_data.family_name = (
+            new_data.family_name.value
+            if isinstance(new_data.family_name, StringValue)
+            else new_data.family_name
+        )
+        new_data.qualifier = (
+            new_data.qualifier.value
+            if isinstance(new_data.qualifier, BytesValue)
+            else new_data.qualifier
+        )
         last_scanned = new_data.last_scanned_row_key
         # if the server sends a scan heartbeat, notify the state machine.
         if last_scanned:
@@ -93,7 +109,7 @@ class StateMachine:
     def handle_chunk(self, chunk: ReadRowsResponse.CellChunk):
         assert isinstance(self.current_state, State)
         if chunk.row_key in self.completed_row_keys:
-            raise InvalidChunk(f"duplicate row key: {chunk.row_key}")
+            raise InvalidChunk(f"duplicate row key: {chunk.row_key.decode()}")
         self.current_state = self.current_state.handle_chunk(chunk)
 
     def has_complete_row(self) -> bool:
@@ -181,7 +197,7 @@ class AWAITING_NEW_ROW(State):
             raise InvalidChunk("New row is missing a row key")
         if (
             self._owner.last_seen_row_key
-            and self._owner.last_seen_row_key >= chunk.row_key.value
+            and self._owner.last_seen_row_key >= chunk.row_key
         ):
             raise InvalidChunk("Out of order row keys")
         self._owner.adapter.start_row(chunk.row_key)
@@ -203,24 +219,13 @@ class AWAITING_NEW_CELL(State):
         chunk_size = len(chunk.value)
         is_split = chunk.value_size > 0
         expected_cell_size = chunk.value_size if is_split else chunk_size
-        # unwrap proto values if needed
-        family_name = (
-            chunk.family_name.value
-            if isinstance(chunk.family_name, StringValue)
-            else chunk.family_name
-        )
-        qualifier = (
-            chunk.qualifier.value
-            if isinstance(chunk.qualifier, BytesValue)
-            else chunk.qualifier
-        )
         # track latest cell data. New chunks won't send repeated data
-        if family_name:
-            self._owner.last_cell_data["family"] = family_name
-            if not qualifier:
+        if chunk.family_name:
+            self._owner.last_cell_data["family"] = chunk.family_name
+            if not chunk.qualifier:
                 raise InvalidChunk("new column family must specify qualifier")
-        if qualifier:
-            self._owner.last_cell_data["qualifier"] = qualifier
+        if chunk.qualifier:
+            self._owner.last_cell_data["qualifier"] = chunk.qualifier
             if not self._owner.last_cell_data.get("family", False):
                 raise InvalidChunk("family not found")
         self._owner.last_cell_data["labels"] = chunk.labels
@@ -370,7 +375,7 @@ class RowBuilder:
 
     def finish_row(self) -> PartialRowData:
         """called once per row to signal that all cells have been processed (unless reset)"""
-        cell_data = {}
+        cell_data:Dict[Any,Any] = {}
         for cell in self.previous_cells:
             # TODO: handle timezones?
             # should probably make a new row class

@@ -152,13 +152,10 @@ class BigtableDataClient(ClientWithProject):
                 "row_keys": [s.encode() for s in row_set.row_keys],
                 "row_ranges": [r.get_range_kwargs for r in row_set.row_ranges],
             }
-        emitted_rows = set()
+        emitted_rows:Set[bytes] = set({})
 
         def on_error(exc):
-            from time import sleep
-
             print(f"RETRYING: {exc}")
-            sleep(5)
 
         predicate = retries.if_exception_type(RuntimeError)
         retry = retries.AsyncRetry(

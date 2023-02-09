@@ -158,7 +158,6 @@ class PooledBigtableGrpcAsyncIOTransport(BigtableTransport):
           google.api_core.exceptions.DuplicateCredentialArgs: If both ``credentials``
               and ``credentials_file`` are passed.
         """
-        self._channel_pool = None
         self._ssl_channel_credentials = ssl_channel_credentials
         self._stubs: Dict[str, Callable] = {}
 
