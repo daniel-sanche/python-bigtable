@@ -162,8 +162,8 @@ class BigtableDataClient(ClientWithProject):
         retry = retries.AsyncRetry(
             predicate=predicate, timeout=timeout, on_error=on_error, generator_target=True
         )
-        timeout = TimeToDeadlineTimeout(timeout=timeout)
-        retryable_fn = retry(timeout(self._read_rows_helper))
+        timeout_fn = TimeToDeadlineTimeout(timeout=timeout)
+        retryable_fn = retry(timeout_fn(self._read_rows_helper))
         async for result in await retryable_fn(request, emitted_rows):
             yield result
 
@@ -201,8 +201,8 @@ class BigtableDataClient(ClientWithProject):
                 request.get("rows", None), emitted_rows
             )
         merger = RowMerger()
-        generator = merger.consume_requests(self._gapic_client.read_rows(
-            request=request, app_profile_id=self._app_profile_id, timeout=timeout, retry=None
+        generator = merger.parse_requests(self._gapic_client.read_rows(
+            request=request, app_profile_id=self._app_profile_id, timeout=timeout
         ))
         async for row in generator:
             if row.row_key not in emitted_rows:

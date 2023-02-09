@@ -18,8 +18,9 @@ from google.cloud.bigtable.row import Row, DirectRow, InvalidChunk, PartialRowDa
 from google.protobuf.wrappers_pb2 import StringValue, BytesValue
 from collections import deque, namedtuple
 from datetime import datetime
+import asyncio
 
-from typing import Deque, Optional, List, Dict, Set, Any, AsyncIterable
+from typing import cast, Deque, Optional, List, Dict, Set, Any, AsyncIterable, AsyncGenerator, Awaitable
 
 # java implementation:
 # https://github.com/googleapis/java-bigtable/blob/8b120de58f0dfba3573ab696fb0e5375e917a00e/google-cloud-bigtable/src/main/java/com/google/cloud/bigtable/data/v2/stub/readrows/RowMerger.java
@@ -28,25 +29,42 @@ from typing import Deque, Optional, List, Dict, Set, Any, AsyncIterable
 class RowMerger:
     def __init__(self):
         self.merged_rows: Deque[PartialRowData] = deque([])
-        self.state_machine = StateMachine()
+        self.state_machine: StateMachine = StateMachine()
+        self.cache: asyncio.Queue[PartialRowData] = asyncio.Queue()
 
-    async def consume_requests(self, request_gen:AsyncIterable[ReadRowsResponse]):
+    async def _consume_stream(self, request_gen:Awaitable[AsyncIterable[ReadRowsResponse]]):
+        """
+        Coroutine to consume ReadRowsResponses from the backend, 
+        run them through the state machine, and push them into the queue for later
+        consumption
+        """
         async for request in await request_gen:
             while self.has_full_frame():
                 row = self.pop()
-                yield row
+                await self.cache.put(row)
             self.push(request)
         # flush remaining rows
         while self.has_full_frame():
             row = self.pop()
-            yield row
+            await self.cache.put(row)
         if self.has_partial_frame():
             # read rows is complete, but there's still data in the merger
             raise RuntimeError("read_rows completed with partial state remaining")
 
+    async def parse_requests(self, request_gen:Awaitable[AsyncIterable[ReadRowsResponse]]) -> AsyncGenerator[PartialRowData, None]:
+        # start consumption as a background task
+        task = asyncio.create_task(self._consume_stream(request_gen))
+        # yield results from the queue as they come
+        while not task.done() or not self.cache.empty():
+            result = await self.cache.get()
+            yield result
+        # read complete. Rasie exception if any
+        if task.exception():
+            raise cast(Exception, task.exception())
+
     def push(self, new_data: ReadRowsResponse):
         if not isinstance(new_data, ReadRowsResponse):
-            new_data = ReadRowsResponse(new_data)
+            new_data = ReadRowsResponse(new_data)  #type: ignore
         last_scanned = new_data.last_scanned_row_key
         # if the server sends a scan heartbeat, notify the state machine.
         if last_scanned:
