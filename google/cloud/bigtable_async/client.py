@@ -42,8 +42,8 @@ from google.cloud.bigtable_v2.types.data import Mutation
 
 from google.rpc.status_pb2 import Status
 from google.api_core import exceptions as core_exceptions
-
 from google.api_core import retry_async as retries
+from google.api_core.timeout import TimeToDeadlineTimeout
 
 if TYPE_CHECKING:
     # import dependencies when type checking
@@ -130,6 +130,7 @@ class BigtableDataClient(ClientWithProject):
         row_keys: Optional[List[str]] = None,
         row_ranges: Optional[List[RowRange]] = None,
         row_filter: Optional[RowFilter] = None,
+        timeout: float = 60.0,
     ) -> AsyncIterable[Row]:
         """
         Returns a generator to asynchronously stream back row data
@@ -159,11 +160,11 @@ class BigtableDataClient(ClientWithProject):
 
         predicate = retries.if_exception_type(RuntimeError)
         retry = retries.AsyncRetry(
-            predicate=predicate, deadline=60.0, on_error=on_error, generator_target=True
+            predicate=predicate, timeout=timeout, on_error=on_error, generator_target=True
         )
-        retryable_fn = retry(self._read_rows_helper)
+        timeout = TimeToDeadlineTimeout(timeout=timeout)
+        retryable_fn = retry(timeout(self._read_rows_helper))
         async for result in await retryable_fn(request, emitted_rows):
-            # async for result in self._read_rows_helper(request, emitted_rows):
             yield result
 
     def _revise_rowset_for_already_seen(
@@ -192,7 +193,7 @@ class BigtableDataClient(ClientWithProject):
             return {"row_keys": adjusted_keys, "row_ranges": row_ranges}
 
     async def _read_rows_helper(
-        self, request: Dict[str, Any], emitted_rows: Set[bytes]
+        self, request: Dict[str, Any], emitted_rows: Set[bytes], timeout=60.0
     ):
         if len(emitted_rows) > 0:
             # if this is a retry, try to trim down the request to avoid ones we've already processed
@@ -201,7 +202,7 @@ class BigtableDataClient(ClientWithProject):
             )
         merger = RowMerger()
         async for result in await self._gapic_client.read_rows(
-            request=request, app_profile_id=self._app_profile_id
+            request=request, app_profile_id=self._app_profile_id, timeout=timeout, retry=None
         ):
             if merger.has_full_frame():
                 row = merger.pop()
@@ -209,7 +210,6 @@ class BigtableDataClient(ClientWithProject):
                     emitted_rows.add(row.row_key)
                     print(f"YIELDING: {row.row_key}")
                     yield row
-                    raise RuntimeError("test")
                 else:
                     print(f"SKIPPING ROW: {row.row_key}")
             else:
