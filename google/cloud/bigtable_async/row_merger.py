@@ -19,7 +19,7 @@ from google.protobuf.wrappers_pb2 import StringValue, BytesValue
 from collections import deque, namedtuple
 from datetime import datetime
 
-from typing import Deque, Optional, List, Dict, Set, Any
+from typing import Deque, Optional, List, Dict, Set, Any, AsyncIterable
 
 # java implementation:
 # https://github.com/googleapis/java-bigtable/blob/8b120de58f0dfba3573ab696fb0e5375e917a00e/google-cloud-bigtable/src/main/java/com/google/cloud/bigtable/data/v2/stub/readrows/RowMerger.java
@@ -29,6 +29,20 @@ class RowMerger:
     def __init__(self):
         self.merged_rows: Deque[PartialRowData] = deque([])
         self.state_machine = StateMachine()
+
+    async def consume_requests(self, request_gen:AsyncIterable[ReadRowsResponse]):
+        async for request in await request_gen:
+            while self.has_full_frame():
+                row = self.pop()
+                yield row
+            self.push(request)
+        # flush remaining rows
+        while self.has_full_frame():
+            row = self.pop()
+            yield row
+        if self.has_partial_frame():
+            # read rows is complete, but there's still data in the merger
+            raise RuntimeError("read_rows completed with partial state remaining")
 
     def push(self, new_data: ReadRowsResponse):
         if not isinstance(new_data, ReadRowsResponse):
