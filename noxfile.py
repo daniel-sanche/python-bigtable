@@ -193,12 +193,12 @@ def default(session):
         "--quiet",
         f"--junitxml=unit_{session.python}_sponge_log.xml",
         "--cov=google",
-        "--cov=tests/unit/rewrite-tests",
+        "--cov=tests/unit/rewrite_tests",
         "--cov-append",
         "--cov-config=.coveragerc",
         "--cov-report=",
         "--cov-fail-under=0",
-        os.path.join("tests", "unit", "rewrite-tests"),
+        os.path.join("tests", "unit", "rewrite_tests"),
         *session.posargs,
     )
 

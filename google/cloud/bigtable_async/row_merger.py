@@ -31,22 +31,8 @@ class RowMerger:
         self.state_machine = StateMachine()
 
     def push(self, new_data: ReadRowsResponse):
-        # unwrap proto values if needed
-        new_data.row_key = (
-            new_data.row_key.value
-            if isinstance(new_data.row_key, BytesValue)
-            else new_data.row_key
-        )
-        new_data.family_name = (
-            new_data.family_name.value
-            if isinstance(new_data.family_name, StringValue)
-            else new_data.family_name
-        )
-        new_data.qualifier = (
-            new_data.qualifier.value
-            if isinstance(new_data.qualifier, BytesValue)
-            else new_data.qualifier
-        )
+        if not isinstance(new_data, ReadRowsResponse):
+            new_data = ReadRowsResponse(new_data)
         last_scanned = new_data.last_scanned_row_key
         # if the server sends a scan heartbeat, notify the state machine.
         if last_scanned:
@@ -152,9 +138,9 @@ class StateMachine:
             raise InvalidChunk("Bare reset")
         if chunk.row_key:
             raise InvalidChunk("Reset chunk has a row key")
-        if chunk.HasField("family_name"):
+        if "family_name" in chunk:
             raise InvalidChunk("Reset chunk has family_name")
-        if chunk.HasField("qualifier"):
+        if "qualifier" in chunk:
             raise InvalidChunk("Reset chunk has qualifier")
         if chunk.timestamp_micros:
             raise InvalidChunk("Reset chunk has a timestamp")
@@ -269,9 +255,9 @@ class AWAITING_CELL_VALUE(State):
         # ensure reset chunk matches expectations
         if chunk.row_key:
             raise InvalidChunk("found row key mid cell")
-        if chunk.HasField("family_name"):
+        if "family_name" in chunk:
             raise InvalidChunk("In progress cell had a family name")
-        if chunk.HasField("qualifier"):
+        if "qualifier" in chunk:
             raise InvalidChunk("In progress cell had a qualifier")
         if chunk.timestamp_micros:
             raise InvalidChunk("In progress cell had a timestamp")
