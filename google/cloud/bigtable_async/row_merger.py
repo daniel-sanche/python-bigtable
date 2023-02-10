@@ -90,6 +90,7 @@ class RowMergerIterator(RowMerger):
             return get_from_cache.result()
         # if the task was complete with an exception, raise the exception
         elif self.task.done():
+            get_from_cache.cancel()
             if self.task.exception():
                 raise cast(Exception, self.task.exception())
             else:
