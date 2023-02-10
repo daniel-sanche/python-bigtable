@@ -30,8 +30,8 @@ PERFORMANCE_TEST_PYTHON_VERSIONS = ["3.8"]
 CURRENT_DIRECTORY = pathlib.Path(__file__).parent.absolute()
 REPO_ROOT_DIRECTORY = CURRENT_DIRECTORY.parent.parent
 
-REPO_URL = "https://github.com/googleapis/python-logging.git"
-CLONE_REPO_DIR = "python-logging-main"
+# REPO_URL = "https://github.com/googleapis/python-bigtable.git"
+# CLONE_REPO_DIR = "python-bigtable-main"
 
 # 'docfx' is excluded since it only needs to run in 'docs-presubmit'
 nox.options.sessions = ["performance", "performance_regression"]
@@ -53,14 +53,17 @@ def performance(session):
         "pandas",
         "rich",
         "pytest",
+        "pytest-asyncio",
         "google-cloud-testutils",
+        "yappi",
     )
     session.install("-e", str(REPO_ROOT_DIRECTORY))
+    session.install("-e", str(REPO_ROOT_DIRECTORY)+"/python-api-core")
 
     file_path = f"perf_{session.python}_sponge_log.xml"
     session.run(
         "py.test",
-        f"--ignore={CLONE_REPO_DIR}",
+        # f"--ignore={CLONE_REPO_DIR}",
         "-s",
         f"--junitxml={file_path}",
         str(CURRENT_DIRECTORY),
@@ -100,76 +103,76 @@ def get_junitxml_results(file_path, print_results=True):
     return results
 
 
-@nox.session(python=PERFORMANCE_TEST_PYTHON_VERSIONS)
-def performance_regression(session, percent_threshold=10):
-    """Check performance against repo main."""
+# @nox.session(python=PERFORMANCE_TEST_PYTHON_VERSIONS)
+# def performance_regression(session, percent_threshold=10):
+#     """Check performance against repo main."""
 
-    clone_dir = os.path.join(CURRENT_DIRECTORY, CLONE_REPO_DIR)
+#     clone_dir = os.path.join(CURRENT_DIRECTORY, CLONE_REPO_DIR)
 
-    if not os.path.exists(clone_dir):
-        print("downloading copy of repo at `main`")
-        session.run("git", "clone", REPO_URL, CLONE_REPO_DIR)
+#     if not os.path.exists(clone_dir):
+#         print("downloading copy of repo at `main`")
+#         session.run("git", "clone", REPO_URL, CLONE_REPO_DIR)
 
-    # Use pre-release gRPC for performance tests.
-    session.install("--pre", "grpcio")
+#     # Use pre-release gRPC for performance tests.
+#     session.install("--pre", "grpcio")
 
-    # Install all test dependencies, then install this package into the
-    # virtualenv's dist-packages.
-    session.install(
-        "mock",
-        "pandas",
-        "rich",
-        "pytest",
-        "google-cloud-testutils",
-    )
+#     # Install all test dependencies, then install this package into the
+#     # virtualenv's dist-packages.
+#     session.install(
+#         "mock",
+#         "pandas",
+#         "rich",
+#         "pytest",
+#         "google-cloud-testutils",
+#     )
 
-    main_file_name = f"main_perf_{session.python}_sponge_log.xml"
-    head_file_name = f"head_perf_{session.python}_sponge_log.xml"
-    # test against main
-    print("testing against library at `main`...")
-    session.install("-e", str(clone_dir))
-    session.run(
-        "py.test",
-        f"--ignore={CLONE_REPO_DIR}",
-        "-s",
-        f"--junitxml={main_file_name}",
-        str(CURRENT_DIRECTORY),
-        *session.posargs,
-        success_codes=[1, 0],  # don't report failures at this step
-    )
-    # test head
-    print("testing against library at `HEAD`...")
-    session.install("-e", str(REPO_ROOT_DIRECTORY))
-    session.run(
-        "py.test",
-        f"--ignore={CLONE_REPO_DIR}",
-        "-s",
-        f"--junitxml={head_file_name}",
-        str(CURRENT_DIRECTORY),
-        *session.posargs,
-        success_codes=[1, 0],  # don't report failures at this step
-    )
-    # print results
-    main_results = get_junitxml_results(main_file_name, print_results=False)
-    head_results = get_junitxml_results(head_file_name, print_results=False)
-    all_pass = True
-    for test, time in head_results.items():
-        if test in main_results:
-            prev_time = main_results[test]
-            diff = time - prev_time
-            percent_diff = diff / prev_time
-            test_passes = percent_diff * 100 < percent_threshold
-            all_pass = all_pass and test_passes
-            if not test_passes:
-                color = parse_colors("red")
-            elif diff > 0:
-                color = parse_colors("yellow")
-            else:
-                color = parse_colors("green")
-            print(
-                f"{test}: {color} {diff:+.3f}s ({percent_diff:+.1%}){parse_colors('reset')}"
-            )
-        else:
-            print(f"{test}: ???")
-    if not all_pass:
-        session.error(f"performance degraded >{percent_threshold}%")
+#     main_file_name = f"main_perf_{session.python}_sponge_log.xml"
+#     head_file_name = f"head_perf_{session.python}_sponge_log.xml"
+#     # test against main
+#     print("testing against library at `main`...")
+#     session.install("-e", str(clone_dir))
+#     session.run(
+#         "py.test",
+#         f"--ignore={CLONE_REPO_DIR}",
+#         "-s",
+#         f"--junitxml={main_file_name}",
+#         str(CURRENT_DIRECTORY),
+#         *session.posargs,
+#         success_codes=[1, 0],  # don't report failures at this step
+#     )
+#     # test head
+#     print("testing against library at `HEAD`...")
+#     session.install("-e", str(REPO_ROOT_DIRECTORY))
+#     session.run(
+#         "py.test",
+#         f"--ignore={CLONE_REPO_DIR}",
+#         "-s",
+#         f"--junitxml={head_file_name}",
+#         str(CURRENT_DIRECTORY),
+#         *session.posargs,
+#         success_codes=[1, 0],  # don't report failures at this step
+#     )
+#     # print results
+#     main_results = get_junitxml_results(main_file_name, print_results=False)
+#     head_results = get_junitxml_results(head_file_name, print_results=False)
+#     all_pass = True
+#     for test, time in head_results.items():
+#         if test in main_results:
+#             prev_time = main_results[test]
+#             diff = time - prev_time
+#             percent_diff = diff / prev_time
+#             test_passes = percent_diff * 100 < percent_threshold
+#             all_pass = all_pass and test_passes
+#             if not test_passes:
+#                 color = parse_colors("red")
+#             elif diff > 0:
+#                 color = parse_colors("yellow")
+#             else:
+#                 color = parse_colors("green")
+#             print(
+#                 f"{test}: {color} {diff:+.3f}s ({percent_diff:+.1%}){parse_colors('reset')}"
+#             )
+#         else:
+#             print(f"{test}: ???")
+#     if not all_pass:
+#         session.error(f"performance degraded >{percent_threshold}%")
