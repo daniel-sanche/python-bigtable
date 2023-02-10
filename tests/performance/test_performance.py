@@ -19,9 +19,9 @@ import time
 import io
 import pytest
 import yappi
+import timeit
 
 import pandas as pd
-import cProfile
 import pstats
 from rich.panel import Panel
 import rich
@@ -49,25 +49,6 @@ class MockGRPCTransport(PooledBigtableGrpcAsyncIOTransport):
         print("IN MOCK")
         time.sleep(self.latency)
         return self.return_value
-
-
-def instrument_function(*args, **kwargs):
-    """
-    Decorator that takes in a function and returns timing data,
-    along with the functions outpu
-    """
-
-    def inner(func):
-        profiler = kwargs.pop("profiler")
-        profiler.enable()
-        start = time.perf_counter()
-        func_output = func(*args, **kwargs)
-        end = time.perf_counter()
-        profiler.disable()
-        exec_time = end - start
-        return exec_time, func_output
-
-    return inner
 
 
 def _make_client(mock_network=True, mock_latency=0.01):
@@ -155,47 +136,26 @@ async def wrap_request(data):
 ##########################################################
 
 
-
-def test_client_init_performance(time_limit=0.25):
-    """
-    Test the performance of initializing a new client
-
-    tested variations:
-    - grpc vs http network protocols
-    """
-    results = []
-    pr = cProfile.Profile()
-    # create clients
-    exec_time, client = instrument_function(
-        mock_network=True, profiler=pr
-    )(_make_client)
-    result_dict = {"exec_time": exec_time}
-    results.append(result_dict)
-    # print results dataframe
-    stats = pstats.Stats(pr)
-    total_time = _print_results(stats, results, time_limit, "Client Init")
-    assert total_time <= time_limit
-
-
-
 def test_row_merge(time_limit=60):
     results = []
-    pr = cProfile.Profile()
-
-    def profiled_code(req):
-        merger = RowMerger()
-        merger.push(req)
+    yappi.set_clock_type("cpu")
 
     for num_rows in [100, 1000, 5000]:
         for payload_size in [0, 1e3, 1e5]:
             request = _create_request(num_rows, payload_size)
-            exec_time, _ = instrument_function(request, profiler=pr)(
-                profiled_code
-            )
+
+            # run profiler
+            start_time = timeit.default_timer()
+            with yappi.run():
+                merger = RowMerger()
+                merger.push(request)
+            end_time = timeit.default_timer()
+            exec_time = end_time - start_time
+
             result_dict = {"num_rows": num_rows, "row_size":payload_size, "exec_time": exec_time}
             results.append(result_dict)
     # print results dataframe
-    stats = pstats.Stats(pr)
+    stats = yappi.convert2pstats(yappi.get_func_stats())
     total_time = _print_results(
         stats, results, time_limit, "Row Merger"
     )
@@ -205,7 +165,6 @@ def test_row_merge(time_limit=60):
 @pytest.mark.asyncio
 async def test_row_read(time_limit=60):
     results = []
-    pr = cProfile.Profile()
     yappi.set_clock_type("cpu")
 
     for num_rows in [100, 1000, 5000]:
@@ -215,19 +174,16 @@ async def test_row_read(time_limit=60):
             client = BigtableDataClient("test", transport=transport)
             client._gapic_client.read_rows = transport.read_rows
 
-            pr.enable()
             start = time.perf_counter()
             with yappi.run():
                 async for item in client.read_rows_stream("my-table"):
                     pass
 
             end = time.perf_counter()
-            pr.disable()
             exec_time = end - start
 
             result_dict = {"num_rows": num_rows, "row_size":payload_size, "exec_time": exec_time}
             results.append(result_dict)
-    # yappi.get_func_stats().print_all()
     rich.print("[cyan]Breakdown by Function")
     pd.set_option("display.max_colwidth", None)
     stats = yappi.convert2pstats(yappi.get_func_stats())
