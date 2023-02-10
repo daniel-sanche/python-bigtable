@@ -123,56 +123,6 @@ def _print_results(stats, results, time_limit, title, profile_rows=25):
     print(profile_df)
     return total_time
 
-class TestPerformance(unittest.TestCase):
-    def setUp(self):
-        # show entire table when printing pandas dataframes
-        pd.set_option("display.max_colwidth", None)
-
-
-    def test_client_init_performance(self, time_limit=0.25):
-        """
-        Test the performance of initializing a new client
-
-        tested variations:
-        - grpc vs http network protocols
-        """
-        results = []
-        pr = cProfile.Profile()
-        # create clients
-        exec_time, client = instrument_function(
-            mock_network=True, profiler=pr
-        )(_make_client)
-        result_dict = {"exec_time": exec_time}
-        results.append(result_dict)
-        # print results dataframe
-        stats = pstats.Stats(pr)
-        total_time = _print_results(stats, results, time_limit, "Client Init")
-        self.assertLessEqual(total_time, time_limit)
-
-
-
-    def test_row_merge(self, time_limit=60):
-        results = []
-        pr = cProfile.Profile()
-
-        def profiled_code(req):
-            merger = RowMerger()
-            merger.push(req)
-
-        for num_rows in [100, 1000, 5000]:
-            for payload_size in [0, 1e3, 1e5]:
-                request = _create_request(num_rows, payload_size)
-                exec_time, _ = instrument_function(request, profiler=pr)(
-                    profiled_code
-                )
-                result_dict = {"num_rows": num_rows, "row_size":payload_size, "exec_time": exec_time}
-                results.append(result_dict)
-        # print results dataframe
-        stats = pstats.Stats(pr)
-        total_time = self._print_results(
-            stats, results, time_limit, "Row Merger"
-        )
-        self.assertLessEqual(total_time, time_limit)
 
 def _create_request(rows=1000, payload_size=10):
     chunks = [
@@ -200,6 +150,57 @@ class WrapRequest:
 
 async def wrap_request(data):
     return WrapRequest(data)
+
+
+##########################################################
+
+
+
+def test_client_init_performance(time_limit=0.25):
+    """
+    Test the performance of initializing a new client
+
+    tested variations:
+    - grpc vs http network protocols
+    """
+    results = []
+    pr = cProfile.Profile()
+    # create clients
+    exec_time, client = instrument_function(
+        mock_network=True, profiler=pr
+    )(_make_client)
+    result_dict = {"exec_time": exec_time}
+    results.append(result_dict)
+    # print results dataframe
+    stats = pstats.Stats(pr)
+    total_time = _print_results(stats, results, time_limit, "Client Init")
+    assert total_time <= time_limit
+
+
+
+def test_row_merge(time_limit=60):
+    results = []
+    pr = cProfile.Profile()
+
+    def profiled_code(req):
+        merger = RowMerger()
+        merger.push(req)
+
+    for num_rows in [100, 1000, 5000]:
+        for payload_size in [0, 1e3, 1e5]:
+            request = _create_request(num_rows, payload_size)
+            exec_time, _ = instrument_function(request, profiler=pr)(
+                profiled_code
+            )
+            result_dict = {"num_rows": num_rows, "row_size":payload_size, "exec_time": exec_time}
+            results.append(result_dict)
+    # print results dataframe
+    stats = pstats.Stats(pr)
+    total_time = _print_results(
+        stats, results, time_limit, "Row Merger"
+    )
+    assert total_time <= time_limit
+
 
 @pytest.mark.asyncio
 async def test_row_read(time_limit=60):
@@ -234,4 +235,4 @@ async def test_row_read(time_limit=60):
     total_time = _print_results(
         stats, results, time_limit, "Read Rows"
     )
-    # self.assertLessEqual(total_time, time_limit)
+    assert total_time <= time_limit
