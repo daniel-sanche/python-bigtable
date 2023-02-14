@@ -163,52 +163,40 @@ class BigtableDataClient(ClientWithProject):
             return exc
 
         retry = retries.AsyncRetry(
-            predicate=retries.if_exception_type(RuntimeError),
+            predicate=retries.if_exception_type(
+                RuntimeError,
+                core_exceptions.DeadlineExceeded,
+                core_exceptions.ServiceUnavailable
+            ),
             timeout=timeout,
             on_error=on_error,
             initial=0.1,
-            multiplier=1,
-            generator_target=True
+            multiplier=2,
+            maximum=1,
+            is_generator=True
         )
         retryable_fn = retry(self._read_rows_helper)
-        async for result in retryable_fn(request, emitted_rows, init_call_timeout=timeout):
+        async for result in retryable_fn(request, emitted_rows, timeout=timeout):
             if isinstance(result, PartialRowData):
                 yield result
             else:
                 print(f"EXCEPTION: {result}")
 
     async def _read_rows_helper(
-        self, request: Dict[str, Any], emitted_rows: Set[bytes], init_call_timeout=60.0, revise_request_on_retry=True,
+        self, request: Dict[str, Any], emitted_rows: Set[bytes],timeout=60.0, revise_request_on_retry=True,
     ) -> AsyncGenerator[PartialRowData, None]:
         """
         Block of code that is retried if an exception is thrown during read_rows
         emitted_rows state is kept, to avoid emitting duplicates
         The input request is also modified between requests to avoid repeat rows where possible
-
-        init_call_timeout: how long to wait on the gapic call to get the stream generator
         """
         if revise_request_on_retry and len(emitted_rows) > 0:
             # if this is a retry, try to trim down the request to avoid ones we've already processed
             request["rows"] = self._revise_rowset(
                 request.get("rows", None), emitted_rows
             )
-        # set up the gapic stream
-        # has own retry process for just the stream set-up phase
-        gapic_retry = retries.AsyncRetry(
-            predicate=retries.if_exception_type(
-                core_exceptions.DeadlineExceeded,
-                core_exceptions.ServiceUnavailable
-            ),
-            initial=0.1,
-            multiplier=2,
-            maximum=init_call_timeout,
-            timeout=init_call_timeout,
-            is_generator=False,
-        )
-        gapic_timeout = TimeToDeadlineTimeout(timeout=init_call_timeout)
-        wrapped_gapic = gapic_retry(gapic_timeout(self._gapic_client.read_rows))
-        gapic_stream_handler = await wrapped_gapic(
-            request=request, app_profile_id=self._app_profile_id
+        gapic_stream_handler = await self._gapic_client.read_rows(
+            request=request, app_profile_id=self._app_profile_id, timeout=timeout
         )
         generator = RowMergerIterator(gapic_stream_handler)
         async for row in generator:
