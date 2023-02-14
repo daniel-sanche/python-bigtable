@@ -43,8 +43,7 @@ from google.cloud.bigtable_v2.types.data import Mutation
 
 from google.rpc.status_pb2 import Status
 from google.api_core import exceptions as core_exceptions
-from google.api_core import retry_async as retries_a
-from google.api_core import retry as retries
+from google.api_core import retry_async as retries
 from google.api_core.timeout import TimeToDeadlineTimeout
 
 if TYPE_CHECKING:
@@ -163,7 +162,7 @@ class BigtableDataClient(ClientWithProject):
             print(f"RETRYING: {exc}")
             return exc
 
-        retry = retries_a.AsyncRetry(
+        retry = retries.AsyncRetry(
             predicate=retries.if_exception_type(RuntimeError),
             timeout=timeout,
             on_error=on_error,
@@ -195,8 +194,7 @@ class BigtableDataClient(ClientWithProject):
             )
         # set up the gapic stream
         # has own retry process for just the stream set-up phase
-        # TODO: is this retry necessary? Or does the call actually happen in the await?
-        gapic_retry = retries.Retry(
+        gapic_retry = retries.AsyncRetry(
             predicate=retries.if_exception_type(
                 core_exceptions.DeadlineExceeded,
                 core_exceptions.ServiceUnavailable
@@ -205,10 +203,10 @@ class BigtableDataClient(ClientWithProject):
             multiplier=2,
             maximum=init_call_timeout,
             timeout=init_call_timeout,
+            is_generator=False,
         )
         gapic_timeout = TimeToDeadlineTimeout(timeout=init_call_timeout)
         wrapped_gapic = gapic_retry(gapic_timeout(self._gapic_client.read_rows))
-        # TODO: is this blocking here?
         gapic_stream_handler = await wrapped_gapic(
             request=request, app_profile_id=self._app_profile_id
         )
