@@ -43,7 +43,8 @@ from google.cloud.bigtable_v2.types.data import Mutation
 
 from google.rpc.status_pb2 import Status
 from google.api_core import exceptions as core_exceptions
-from google.api_core import retry_async as retries
+from google.api_core import retry_async as retries_a
+from google.api_core import retry as retries
 from google.api_core.timeout import TimeToDeadlineTimeout
 
 if TYPE_CHECKING:
@@ -131,10 +132,12 @@ class BigtableDataClient(ClientWithProject):
         row_keys: Optional[List[str]] = None,
         row_ranges: Optional[List[RowRange]] = None,
         row_filter: Optional[RowFilter] = None,
-        timeout: float = 60.0,
+        timeout: float = 120.0,
     ) -> AsyncGenerator[PartialRowData, None]:
         """
         Returns a generator to asynchronously stream back row data
+
+        timeout: tiem to complete entire stream. only counts time actively yielding a row
         """
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
@@ -158,39 +161,65 @@ class BigtableDataClient(ClientWithProject):
 
         def on_error(exc):
             print(f"RETRYING: {exc}")
+            return exc
 
-        predicate = retries.if_exception_type(RuntimeError)
-        retry = retries.AsyncRetry(
-            predicate=predicate, timeout=timeout, on_error=on_error, generator_target=True
+        retry = retries_a.AsyncRetry(
+            predicate=retries.if_exception_type(RuntimeError),
+            timeout=timeout,
+            on_error=on_error,
+            initial=0.1,
+            multiplier=1,
+            generator_target=True
         )
-        timeout_fn = TimeToDeadlineTimeout(timeout=timeout)
-        retryable_fn = retry(timeout_fn(self._read_rows_helper))
-        async for result in await retryable_fn(request, emitted_rows):
-            yield result
+        retryable_fn = retry(self._read_rows_helper)
+        async for result in retryable_fn(request, emitted_rows, init_call_timeout=timeout):
+            if isinstance(result, PartialRowData):
+                yield result
+            else:
+                print(f"EXCEPTION: {result}")
 
     async def _read_rows_helper(
-        self, request: Dict[str, Any], emitted_rows: Set[bytes], timeout=60.0, revise_request_on_retry=True,
+        self, request: Dict[str, Any], emitted_rows: Set[bytes], init_call_timeout=60.0, revise_request_on_retry=True,
     ) -> AsyncGenerator[PartialRowData, None]:
         """
         Block of code that is retried if an exception is thrown during read_rows
         emitted_rows state is kept, to avoid emitting duplicates
         The input request is also modified between requests to avoid repeat rows where possible
+
+        init_call_timeout: how long to wait on the gapic call to get the stream generator
         """
         if revise_request_on_retry and len(emitted_rows) > 0:
             # if this is a retry, try to trim down the request to avoid ones we've already processed
             request["rows"] = self._revise_rowset(
                 request.get("rows", None), emitted_rows
             )
-        generator = RowMergerIterator(self._gapic_client.read_rows(
-            request=request, app_profile_id=self._app_profile_id, timeout=timeout
-        ))
+        # set up the gapic stream
+        # has own retry process for just the stream set-up phase
+        # TODO: is this retry necessary? Or does the call actually happen in the await?
+        gapic_retry = retries.Retry(
+            predicate=retries.if_exception_type(
+                core_exceptions.DeadlineExceeded,
+                core_exceptions.ServiceUnavailable
+            ),
+            initial=0.1,
+            multiplier=2,
+            maximum=init_call_timeout,
+            timeout=init_call_timeout,
+        )
+        gapic_timeout = TimeToDeadlineTimeout(timeout=init_call_timeout)
+        wrapped_gapic = gapic_retry(gapic_timeout(self._gapic_client.read_rows))
+        # TODO: is this blocking here?
+        gapic_stream_handler = await wrapped_gapic(
+            request=request, app_profile_id=self._app_profile_id
+        )
+        generator = RowMergerIterator(gapic_stream_handler)
         async for row in generator:
             if row.row_key not in emitted_rows:
                 emitted_rows.add(row.row_key)
-                print(f"YIELDING: {row.row_key}")
+                # print(f"YIELDING: {row.row_key}")
                 yield row
-            else:
-                print(f"SKIPPING ROW: {row.row_key}")
+            # else:
+                # print(f"SKIPPING ROW: {row.row_key}")
 
     def _revise_rowset(
         self, row_set: Optional[Dict[str, Any]], emitted_rows: Set[bytes]
