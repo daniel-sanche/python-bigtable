@@ -132,10 +132,12 @@ class BigtableDataClient(ClientWithProject):
         row_keys: Optional[List[str]] = None,
         row_ranges: Optional[List[RowRange]] = None,
         row_filter: Optional[RowFilter] = None,
-        timeout: float = 60.0,
+        timeout: float = 120.0,
     ) -> AsyncGenerator[PartialRowData, None]:
         """
         Returns a generator to asynchronously stream back row data
+
+        timeout: tiem to complete entire stream. only counts time actively yielding a row
         """
         table_name = (
             f"projects/{self.project}/instances/{self._instance}/tables/{table_id}"
@@ -159,18 +161,30 @@ class BigtableDataClient(ClientWithProject):
 
         def on_error(exc):
             print(f"RETRYING: {exc}")
+            return exc
 
-        predicate = retries.if_exception_type(RuntimeError)
         retry = retries.AsyncRetry(
-            predicate=predicate, timeout=timeout, on_error=on_error, generator_target=True
+            predicate=retries.if_exception_type(
+                RuntimeError,
+                core_exceptions.DeadlineExceeded,
+                core_exceptions.ServiceUnavailable
+            ),
+            timeout=timeout,
+            on_error=on_error,
+            initial=0.1,
+            multiplier=2,
+            maximum=1,
+            is_generator=True
         )
-        timeout_fn = TimeToDeadlineTimeout(timeout=timeout)
-        retryable_fn = retry(timeout_fn(self._read_rows_helper))
-        async for result in await retryable_fn(request, emitted_rows):
-            yield result
+        retryable_fn = retry(self._read_rows_helper)
+        async for result in retryable_fn(request, emitted_rows, timeout=timeout):
+            if isinstance(result, PartialRowData):
+                yield result
+            else:
+                print(f"EXCEPTION: {result}")
 
     async def _read_rows_helper(
-        self, request: Dict[str, Any], emitted_rows: Set[bytes], timeout=60.0, revise_request_on_retry=True,
+        self, request: Dict[str, Any], emitted_rows: Set[bytes],timeout=60.0, revise_request_on_retry=True,
     ) -> AsyncGenerator[PartialRowData, None]:
         """
         Block of code that is retried if an exception is thrown during read_rows
@@ -182,16 +196,17 @@ class BigtableDataClient(ClientWithProject):
             request["rows"] = self._revise_rowset(
                 request.get("rows", None), emitted_rows
             )
-        generator = RowMergerIterator(self._gapic_client.read_rows(
+        gapic_stream_handler = await self._gapic_client.read_rows(
             request=request, app_profile_id=self._app_profile_id, timeout=timeout
-        ))
+        )
+        generator = RowMergerIterator(gapic_stream_handler)
         async for row in generator:
             if row.row_key not in emitted_rows:
                 emitted_rows.add(row.row_key)
-                print(f"YIELDING: {row.row_key}")
+                # print(f"YIELDING: {row.row_key}")
                 yield row
-            else:
-                print(f"SKIPPING ROW: {row.row_key}")
+            # else:
+                # print(f"SKIPPING ROW: {row.row_key}")
 
     def _revise_rowset(
         self, row_set: Optional[Dict[str, Any]], emitted_rows: Set[bytes]

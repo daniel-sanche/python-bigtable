@@ -99,13 +99,13 @@ class RowMergerIterator(RowMerger):
         else:
             raise RuntimeError("expected either new item or stream completion")
 
-    async def _consume_stream(self, request_gen:Awaitable[AsyncIterable[ReadRowsResponse]]):
+    async def _consume_stream(self, request_gen:AsyncIterable[ReadRowsResponse]):
         """
         Coroutine to consume ReadRowsResponses from the backend, 
         run them through the state machine, and push them into the queue for later
         consumption
         """
-        async for request in await request_gen:
+        async for request in request_gen:
             self.push(request)
         if self.has_partial_frame():
             # read rows is complete, but there's still data in the merger
