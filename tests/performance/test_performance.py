@@ -34,6 +34,8 @@ from google.cloud.bigtable_v2.services.bigtable.client import BigtableClientMeta
 from google.cloud.bigtable_v2 import ReadRowsResponse
 from google.cloud.bigtable_async.row_merger import RowMerger
 
+from typing import Iterable, Awaitable, AsyncIterable
+
 class MockGRPCTransport(PooledBigtableGrpcAsyncIOTransport):
     """
     Mock for grpc transport.
@@ -115,23 +117,11 @@ def _create_request(rows=1000, payload_size=10):
     return req
 
 
-class WrapRequest:
-    def __init__(self, data_list):
-        self.data_list = data_list
-
-    def __aiter__(self):
-        # mark self as async iterator
-        return self
-
-    async def __anext__(self):
-        if self.data_list:
-            return self.data_list.pop()
-        raise StopAsyncIteration
-
-
-async def wrap_request(data):
-    return WrapRequest(data)
-
+async def wrap_request(data:Iterable) -> Awaitable[AsyncIterable]:
+    async def gen():
+        for item in data:
+            yield item
+    return gen()
 
 ##########################################################
 
