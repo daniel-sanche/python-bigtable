@@ -14,11 +14,13 @@
 #
 from __future__ import annotations
 from typing import TYPE_CHECKING
+from collections import namedtuple
 
 if TYPE_CHECKING:
     from google.cloud.bigtable.row_filters import RowFilter
     from google.cloud.bigtable import RowKeySamples
 
+RangePoint = namedtuple("RangePoint", ["key", "is_inclusive"])
 
 class ReadRowsQuery:
     """
@@ -26,23 +28,39 @@ class ReadRowsQuery:
     """
 
     def __init__(
-        self, row_keys: list[str | bytes] | str | bytes | None = None, limit=None
+        self, row_keys: list[str | bytes] | str | bytes | None = None, limit=None, row_filter=None
     ):
-        pass
+        self.row_keys = []
+        self.row_ranges = []
+        if row_keys:
+            self.add_rows(row_keys)
+
+        self.limit = limit
+        self.filter = row_filter
 
     def set_limit(self, limit: int) -> ReadRowsQuery:
-        raise NotImplementedError
+        self.limit = limit
+        return self
 
-    def set_filter(self, filter: "RowFilter") -> ReadRowsQuery:
-        raise NotImplementedError
+    def set_filter(self, row_filter: "RowFilter") -> ReadRowsQuery:
+        self.filter = row_filter
+        return self
 
-    def add_rows(self, row_id_list: list[str]) -> ReadRowsQuery:
-        raise NotImplementedError
+    def add_rows(self, row_keys: list[str|bytes]|str|bytes) -> ReadRowsQuery:
+        if isinstance(row_keys, str) or isinstance(row_keys, bytes):
+            row_keys = [row_keys]
+        self.row_keys.extend(row_keys)
+        return self
 
     def add_range(
-        self, start_key: str | bytes | None = None, end_key: str | bytes | None = None
+        self, start_key: str | bytes | None = None, end_key: str | bytes | None = None,
+        start_is_inclusive: bool = True, end_is_inclusive: bool = False
     ) -> ReadRowsQuery:
-        raise NotImplementedError
+        if start_key is None and end_key is None:
+            raise ValueError("start_key and end_key cannot both be None")
+
+        self.row_ranges.append((RangePoint(start_key, start_is_inclusive), RangePoint(end_key, end_is_inclusive)))
+        return self
 
     def shard(self, shard_keys: "RowKeySamples" | None = None) -> list[ReadRowsQuery]:
         """
@@ -54,3 +72,22 @@ class ReadRowsQuery:
               query (if possible)
         """
         raise NotImplementedError
+
+    def to_dict(self) -> dict:
+        """
+        Convert this query into a dictionary that can be used to construct a
+        ReadRowsRequest protobuf
+        """
+        ranges = []
+        for start, end in self.row_ranges:
+            new_range = {}
+            if start.key is not None:
+                key = "start_key_closed" if start.is_inclusive else "start_key_open"
+                new_range[key] = start.key
+            if end.key is not None:
+                key = "end_key_closed" if end.is_inclusive else "end_key_open"
+                new_range[key] = end.key
+            ranges.append(new_range)
+        row_set = {"row_keys": self.row_keys, "row_ranges": ranges}
+        final_dict = {"rows": row_set, "filter": self.filter.to_dict(), "limit": self.limit}
+        return final_dict
