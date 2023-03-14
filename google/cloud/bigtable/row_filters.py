@@ -277,12 +277,12 @@ class TimestampRange(object):
         """Converts the timestamp range to a dict representation."""
         timestamp_range_kwargs = {}
         if self.start is not None:
-            timestamp_range_kwargs["start_timestamp_micros"] = (
-                _microseconds_from_datetime(self.start) // 1000 * 1000
-            )
+            start_time = _microseconds_from_datetime(self.start) // 1000 * 1000
+            timestamp_range_kwargs["start_timestamp_micros"] =  start_time
         if self.end is not None:
-            end_time = _microseconds_from_datetime(self.end)
+            end_time =  _microseconds_from_datetime(self.end)
             if end_time % 1000 != 0:
+                # if not a whole milisecond value, round up
                 end_time = end_time // 1000 * 1000 + 1000
             timestamp_range_kwargs["end_timestamp_micros"] = end_time
         return timestamp_range_kwargs
@@ -364,9 +364,22 @@ class ColumnRangeFilter(RowFilter):
         column_family_id: str,
         start_column: bytes | None = None,
         end_column: bytes | None = None,
-        inclusive_start: bool | None = True,
-        inclusive_end: bool | None = True,
+        inclusive_start: bool | None = None,
+        inclusive_end: bool | None = None,
     ):
+        if inclusive_start is None:
+            inclusive_start = True
+        elif start_column is None:
+            raise ValueError(
+                "inclusive_start was specified but no start_column was given."
+            )
+        if inclusive_end is None:
+            inclusive_end = True
+        elif end_column is None:
+            raise ValueError(
+                "inclusive_end was specified but no end_column was given."
+            )
+
         self.column_family_id = column_family_id
 
         self.start_column = start_column
@@ -504,9 +517,21 @@ class ValueRangeFilter(RowFilter):
         self,
         start_value: bytes | int | None = None,
         end_value: bytes | int | None = None,
-        inclusive_start: bool = True,
-        inclusive_end: bool = True,
+        inclusive_start: bool = None,
+        inclusive_end: bool = None,
     ):
+        if inclusive_start is None:
+            inclusive_start = True
+        elif start_value is None:
+            raise ValueError(
+                "inclusive_start was specified but no start_value was given."
+            )
+        if inclusive_end is None:
+            inclusive_end = True
+        elif end_value is None:
+            raise ValueError(
+                "inclusive_end was specified but no end_column was given."
+            )
         if isinstance(start_value, int):
             start_value = _PACK_I64(start_value)
         self.start_value = start_value
