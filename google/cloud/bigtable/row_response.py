@@ -239,8 +239,8 @@ class CellResponse:
     def __lt__(self, other) -> bool:
         if not isinstance(other, CellResponse):
             return NotImplemented
-        this_ordering = (self.family, self._column_qualifier_str, self.timestamp)
-        other_ordering = (other.family, other._column_qualifier_str, other.timestamp)
+        this_ordering = (self.family, self._column_qualifier_str, self.timestamp, self.value, self.labels)
+        other_ordering = (other.family, other._column_qualifier_str, other.timestamp, other.value, other.labels)
         return this_ordering < other_ordering
 
     def __eq__(self, other) -> bool:
