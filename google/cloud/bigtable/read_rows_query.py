@@ -13,14 +13,20 @@
 # limitations under the License.
 #
 from __future__ import annotations
-from typing import TYPE_CHECKING
-from collections import namedtuple
+from typing import TYPE_CHECKING, Any
+from .row_response import row_key
+from dataclasses import dataclass
 
 if TYPE_CHECKING:
     from google.cloud.bigtable.row_filters import RowFilter
     from google.cloud.bigtable import RowKeySamples
 
-RangePoint = namedtuple("RangePoint", ["key", "is_inclusive"])
+
+@dataclass
+class _RangePoint:
+    key: row_key | None
+    is_inclusive: bool
+
 
 class ReadRowsQuery:
     """
@@ -28,13 +34,15 @@ class ReadRowsQuery:
     """
 
     def __init__(
-        self, row_keys: list[str | bytes] | str | bytes | None = None, limit=None, row_filter=None
+        self,
+        row_keys: list[str | bytes] | str | bytes | None = None,
+        limit=None,
+        row_filter=None,
     ):
-        self.row_keys = []
-        self.row_ranges = []
+        self.row_keys: list[bytes] = []
+        self.row_ranges: list[tuple[_RangePoint, _RangePoint]] = []
         if row_keys:
             self.add_rows(row_keys)
-
         self.limit = limit
         self.filter = row_filter
 
@@ -46,20 +54,35 @@ class ReadRowsQuery:
         self.filter = row_filter
         return self
 
-    def add_rows(self, row_keys: list[str|bytes]|str|bytes) -> ReadRowsQuery:
+    def add_rows(self, row_keys: list[str | bytes] | str | bytes) -> ReadRowsQuery:
         if isinstance(row_keys, str) or isinstance(row_keys, bytes):
             row_keys = [row_keys]
-        self.row_keys.extend(row_keys)
+        for k in row_keys:
+            if isinstance(k, str):
+                k = k.encode()
+            self.row_keys.append(k)
         return self
 
     def add_range(
-        self, start_key: str | bytes | None = None, end_key: str | bytes | None = None,
-        start_is_inclusive: bool = True, end_is_inclusive: bool = False
+        self,
+        start_key: str | bytes | None = None,
+        end_key: str | bytes | None = None,
+        start_is_inclusive: bool = True,
+        end_is_inclusive: bool = False,
     ) -> ReadRowsQuery:
         if start_key is None and end_key is None:
             raise ValueError("start_key and end_key cannot both be None")
+        if isinstance(start_key, str):
+            start_key = start_key.encode()
+        if isinstance(end_key, str):
+            end_key = end_key.encode()
 
-        self.row_ranges.append((RangePoint(start_key, start_is_inclusive), RangePoint(end_key, end_is_inclusive)))
+        self.row_ranges.append(
+            (
+                _RangePoint(start_key, start_is_inclusive),
+                _RangePoint(end_key, end_is_inclusive),
+            )
+        )
         return self
 
     def shard(self, shard_keys: "RowKeySamples" | None = None) -> list[ReadRowsQuery]:
@@ -73,7 +96,7 @@ class ReadRowsQuery:
         """
         raise NotImplementedError
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert this query into a dictionary that can be used to construct a
         ReadRowsRequest protobuf
@@ -89,5 +112,9 @@ class ReadRowsQuery:
                 new_range[key] = end.key
             ranges.append(new_range)
         row_set = {"row_keys": self.row_keys, "row_ranges": ranges}
-        final_dict = {"rows": row_set, "filter": self.filter.to_dict(), "limit": self.limit}
+        final_dict = {
+            "rows": row_set,
+            "filter": self.filter.to_dict(),
+            "limit": self.limit,
+        }
         return final_dict
