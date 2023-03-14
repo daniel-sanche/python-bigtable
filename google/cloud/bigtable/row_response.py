@@ -255,3 +255,18 @@ class CellResponse:
             and len(self.labels) == len(other.labels)
             and all([label in other.labels for label in self.labels])
         )
+
+    def __ne__(self, other) -> bool:
+        return not self == other
+
+    def __hash__(self):
+        return hash(
+            (
+                self.row_key,
+                self.family,
+                self.column_qualifier,
+                self.value,
+                self.timestamp,
+                tuple(self.labels),
+            )
+        )
