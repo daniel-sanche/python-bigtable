@@ -18,6 +18,13 @@ import unittest
 
 import time
 
+TEST_VALUE = b'1234'
+TEST_ROW_KEY = b'row'
+TEST_FAMILY_ID = 'cf1'
+TEST_QUALIFIER = b'col'
+TEST_TIMESTAMP = time.time_ns()
+TEST_LABELS = ['label1', 'label2']
+
 class TestRowResponse(unittest.TestCase):
 
     @staticmethod
@@ -28,13 +35,68 @@ class TestRowResponse(unittest.TestCase):
     def _make_one(self, *args, **kwargs):
         return self._get_target_class()(*args, **kwargs)
 
+    def test_get_cells(self):
+        pass
 
-TEST_VALUE = b'1234'
-TEST_ROW_KEY = b'row'
-TEST_FAMILY_ID = 'cf1'
-TEST_QUALIFIER = b'col'
-TEST_TIMESTAMP = time.time_ns()
-TEST_LABELS = ['label1', 'label2']
+    def test__get_all_from_family(self):
+        pass
+
+    def test___str__(self):
+        pass
+
+    def test__repr__(self):
+        pass
+
+    def test_to_dict(self):
+        pass
+
+    def test_iteration(self):
+        # should be able to iterate over the RowResponse as a list
+        pass
+
+    def test_contains_cell(self):
+        pass
+
+    def test_contains_family_id(self):
+        pass
+
+    def test_contains_family_qualifier_tuple(self):
+        pass
+
+    def test___len__(self):
+        pass
+
+    def test_int_indexing(self):
+        # should be able to index into underlying list with an index number directly
+        pass
+
+    def test_slice_indexing(self):
+        # should be able to index with a range of indices
+        pass
+
+    def test_family_indexing(self):
+        # should be able to retrieve cells in a family
+        pass
+
+    def test_family_qualifier_indexing(self):
+        # should be able to retrieve cells in a family/qualifier tuplw
+        pass
+
+    def test_keys(self):
+        # should be able to retrieve (family,qualifier) tuples as keys
+        pass
+
+    def test_values(self):
+        # values should return the list of all cells
+        pass
+
+    def test_index_of(self):
+        # given a cell, should find index in underlying list
+        pass
+
+    def test_count(self):
+        pass
+
 
 class TestCellResponse(unittest.TestCase):
 
