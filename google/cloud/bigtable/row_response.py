@@ -69,7 +69,9 @@ class RowResponse(
 
         If family or qualifier not passed, will include all
 
-        Syntactic sugar: cells = row["family", "qualifier"]
+        Can also be accessed through indexing:
+          cells = row["family", "qualifier"]
+          cells = row["family"]
         """
         if family is None:
             if qualifier is not None:
