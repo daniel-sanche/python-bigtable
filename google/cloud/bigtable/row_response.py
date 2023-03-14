@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Sequence, Generator, overload
+from typing import Sequence, Generator, Mapping, overload, Union, List, Tuple
 from functools import total_ordering
 
 # Type aliases used internally for readability.
@@ -25,7 +25,9 @@ qualifier = bytes
 row_value = bytes
 
 
-class RowResponse(Sequence["CellResponse"]):
+class RowResponse(Sequence["CellResponse"],
+                  Mapping[Union[family_id,Tuple[family_id,Union[qualifier,str]]], List["CellResponse"]]
+):
     """
     Model class for row data returned from server
 
@@ -88,16 +90,6 @@ class RowResponse(Sequence["CellResponse"]):
             for cell in cell_batch:
                 yield cell
 
-    def get_index(self) -> list[tuple[family_id, qualifier]]:
-        """
-        Returns a list of family and qualifiers for the object
-        """
-        index_list = []
-        for family in self._cells_map:
-            for qualifier in self._cells_map[family]:
-                index_list.append((family, qualifier))
-        return index_list
-
     def __str__(self) -> str:
         """
         Human-readable string representation
@@ -112,18 +104,34 @@ class RowResponse(Sequence["CellResponse"]):
         if len(self._cells_list) == 0:
             output.append("-\t0")
         else:
-            for title in self.get_index():
-                output.append(f"{title}\t{len(self.get_cells(*title))}")
+            for title in self.keys():
+                output.append(f"{title}\t{len(self[title])}")
         return "\n".join(output)
 
     def __repr__(self):
         cell_reprs = [repr(cell) for cell in self._cells_list]
         return f"RowResponse({self.row_key!r}, {cell_reprs})"
 
-    # Sequence methods
+    # Sequence and Mapping methods
     def __iter__(self):
+        # iterate as a sequence; yield all cells
         for cell in self._cells_list:
             yield cell
+
+    def __contains__(self, item):
+        if isinstance(item, family_id):
+            # check if family key is in RowResponse
+            return item in self._cells_map
+        elif isinstance(item, tuple) and isinstance(item[0], family_id) and isinstance(item[1], (qualifier, str)):
+            # check if (family, qualifier) pair is in RowResponse
+            return item[0] in self._cells_map and item[1] in self._cells_map[item[0]]
+        # check if CellResponse is in RowResponse
+        return item in self._cells_list
+
+    @overload
+    def __getitem__(self, index: family_id|tuple[family_id, qualifier|str], /) -> List[CellResponse]:
+        # overload signature for type checking
+        pass
 
     @overload
     def __getitem__(self, index: int, /) -> CellResponse:
@@ -136,10 +144,23 @@ class RowResponse(Sequence["CellResponse"]):
         pass
 
     def __getitem__(self, index):
-        return self._cells_list[index]
+        if isinstance(index, family_id):
+            return self.get_cells(family=index)
+        elif isinstance(index, tuple) and isinstance(index[0], family_id) and isinstance(index[1], (qualifier, str)):
+            return self.get_cells(family=index[0], qualifier=index[1])
+        else:
+            # index is int or slice
+            return self._cells_list[index]
 
     def __len__(self):
         return len(self._cells_list)
+
+    def keys(self):
+        key_list = []
+        for family in self._cells_map:
+            for qualifier in self._cells_map[family]:
+                key_list.append((family, qualifier))
+        return key_list
 
 @total_ordering
 class CellResponse:
