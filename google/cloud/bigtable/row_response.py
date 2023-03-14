@@ -25,8 +25,11 @@ qualifier = bytes
 row_value = bytes
 
 
-class RowResponse(Sequence["CellResponse"],
-                  Mapping[Union[family_id,Tuple[family_id,Union[qualifier,str]]], List["CellResponse"]]
+class RowResponse(
+    Sequence["CellResponse"],
+    Mapping[
+        Union[family_id, Tuple[family_id, Union[qualifier, str]]], List["CellResponse"]
+    ],
 ):
     """
     Model class for row data returned from server
@@ -42,7 +45,9 @@ class RowResponse(Sequence["CellResponse"],
     def __init__(self, key: row_key, cells: list[CellResponse]):
         """Expected to be used internally only"""
         self.row_key = key
-        self._cells_map: dict[family_id, dict[qualifier, list[CellResponse]]] = OrderedDict()
+        self._cells_map: dict[
+            family_id, dict[qualifier, list[CellResponse]]
+        ] = OrderedDict()
         self._cells_list: list[CellResponse] = []
         # add cells to internal stores using Bigtable native ordering
         for cell in sorted(cells):
@@ -54,7 +59,7 @@ class RowResponse(Sequence["CellResponse"],
             self._cells_list.append(cell)
 
     def get_cells(
-        self, family: str | None=None, qualifier: str | bytes | None=None
+        self, family: str | None = None, qualifier: str | bytes | None = None
     ) -> list[CellResponse]:
         """
         Returns cells sorted in Bigtable native order:
@@ -81,11 +86,13 @@ class RowResponse(Sequence["CellResponse"],
         # return cells in family and qualifier on get_cells(family, qualifier)
         return self._cells_map[family][qualifier]
 
-    def _get_all_from_family(self, family:family_id) -> Generator[CellResponse, None, None]:
+    def _get_all_from_family(
+        self, family: family_id
+    ) -> Generator[CellResponse, None, None]:
         """
         Returns all cells in the row
         """
-        qualifier_dict:dict[qualifier, list[CellResponse]] = self._cells_map.get(family, {})
+        qualifier_dict = self._cells_map.get(family, {})
         for cell_batch in qualifier_dict.values():
             for cell in cell_batch:
                 yield cell
@@ -122,14 +129,21 @@ class RowResponse(Sequence["CellResponse"],
         if isinstance(item, family_id):
             # check if family key is in RowResponse
             return item in self._cells_map
-        elif isinstance(item, tuple) and isinstance(item[0], family_id) and isinstance(item[1], (qualifier, str)):
+        elif (
+            isinstance(item, tuple)
+            and isinstance(item[0], family_id)
+            and isinstance(item[1], (qualifier, str))
+        ):
             # check if (family, qualifier) pair is in RowResponse
             return item[0] in self._cells_map and item[1] in self._cells_map[item[0]]
         # check if CellResponse is in RowResponse
         return item in self._cells_list
 
     @overload
-    def __getitem__(self, index: family_id|tuple[family_id, qualifier|str], /) -> List[CellResponse]:
+    def __getitem__(
+        self,
+        index: family_id | tuple[family_id, qualifier | str],
+    ) -> List[CellResponse]:
         # overload signature for type checking
         pass
 
@@ -146,7 +160,11 @@ class RowResponse(Sequence["CellResponse"],
     def __getitem__(self, index):
         if isinstance(index, family_id):
             return self.get_cells(family=index)
-        elif isinstance(index, tuple) and isinstance(index[0], family_id) and isinstance(index[1], (qualifier, str)):
+        elif (
+            isinstance(index, tuple)
+            and isinstance(index[0], family_id)
+            and isinstance(index[1], (qualifier, str))
+        ):
             return self.get_cells(family=index[0], qualifier=index[1])
         else:
             # index is int or slice
@@ -161,6 +179,7 @@ class RowResponse(Sequence["CellResponse"],
             for qualifier in self._cells_map[family]:
                 key_list.append((family, qualifier))
         return key_list
+
 
 @total_ordering
 class CellResponse:
@@ -218,16 +237,19 @@ class CellResponse:
     def __lt__(self, other) -> bool:
         if not isinstance(other, CellResponse):
             return NotImplemented
-        return (self.family, self._column_qualifier_str, self.timestamp) < \
-            (other.family, other._column_qualifier_str, other.timestamp)
+        this_ordering = (self.family, self._column_qualifier_str, self.timestamp)
+        other_ordering = (other.family, other._column_qualifier_str, other.timestamp)
+        return this_ordering < other_ordering
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, CellResponse):
             return NotImplemented
-        return self.row_key == other.row_key and \
-                self.family == other.family and \
-                self.column_qualifier == other.column_qualifier and \
-                self.value == other.value and \
-                self.timestamp == other.timestamp and \
-                len(self.labels) == len(other.labels) and \
-                all([l in other.labels for l in self.labels])
+        return (
+            self.row_key == other.row_key
+            and self.family == other.family
+            and self.column_qualifier == other.column_qualifier
+            and self.value == other.value
+            and self.timestamp == other.timestamp
+            and len(self.labels) == len(other.labels)
+            and all([label in other.labels for label in self.labels])
+        )
