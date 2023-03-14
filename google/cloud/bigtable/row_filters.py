@@ -295,8 +295,8 @@ class TimestampRangeFilter(RowFilter):
     :param range_: Range of time that cells should match against.
     """
 
-    def __init__(self, range_: TimestampRange):
-        self.range_: TimestampRange = range_
+    def __init__(self, start: "datetime" | None = None, end: "datetime" | None = None):
+        self.range_: TimestampRange = TimestampRange(start, end)
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
