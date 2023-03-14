@@ -212,13 +212,6 @@ class CellResponse:
         self.timestamp_ns = timestamp_ns
         self.labels = labels if labels is not None else []
 
-    def decode(self, encoding:str="UTF-8", errors:str|None=None) -> str:
-        """decode bytes to string"""
-        if errors is None:
-            return self.value.decode(encoding)
-        else:
-            return self.value.decode(encoding, errors)
-
     def __int__(self) -> int:
         """
         Allows casting cell to int
