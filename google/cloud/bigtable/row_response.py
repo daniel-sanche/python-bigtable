@@ -199,7 +199,7 @@ class CellResponse:
         row: row_key,
         family: family_id,
         column_qualifier: qualifier,
-        timestamp: int,
+        timestamp_ns: int,
         labels: list[str] | None = None,
     ):
         """Expected to be used internally only"""
@@ -209,12 +209,15 @@ class CellResponse:
         self.column_qualifier = column_qualifier
         # keep a utf-8 encoded string for lexical comparison
         self._column_qualifier_str = column_qualifier.decode("UTF-8")
-        self.timestamp = timestamp
+        self.timestamp_ns = timestamp_ns
         self.labels = labels if labels is not None else []
 
-    def decode_value(self, encoding="UTF-8", errors=None) -> str:
+    def decode(self, encoding:str="UTF-8", errors:str|None=None) -> str:
         """decode bytes to string"""
-        return self.value.decode(encoding, errors)
+        if errors is None:
+            return self.value.decode(encoding)
+        else:
+            return self.value.decode(encoding, errors)
 
     def __int__(self) -> int:
         """
@@ -232,15 +235,15 @@ class CellResponse:
         return str(self.value)
 
     def __repr__(self):
-        return f"CellResponse(value={self.value!r} row={self.row_key!r}, family={self.family}, column_qualifier={self.column_qualifier!r}, timestamp={self.timestamp}, labels={self.labels})"
+        return f"CellResponse(value={self.value!r} row={self.row_key!r}, family={self.family}, column_qualifier={self.column_qualifier!r}, timestamp_ns={self.timestamp_ns}, labels={self.labels})"
 
     """For Bigtable native ordering"""
 
     def __lt__(self, other) -> bool:
         if not isinstance(other, CellResponse):
             return NotImplemented
-        this_ordering = (self.family, self._column_qualifier_str, self.timestamp, self.value, self.labels)
-        other_ordering = (other.family, other._column_qualifier_str, other.timestamp, other.value, other.labels)
+        this_ordering = (self.family, self._column_qualifier_str, self.timestamp_ns, self.value, self.labels)
+        other_ordering = (other.family, other._column_qualifier_str, other.timestamp_ns, other.value, other.labels)
         return this_ordering < other_ordering
 
     def __eq__(self, other) -> bool:
@@ -251,7 +254,7 @@ class CellResponse:
             and self.family == other.family
             and self.column_qualifier == other.column_qualifier
             and self.value == other.value
-            and self.timestamp == other.timestamp
+            and self.timestamp_ns == other.timestamp_ns
             and len(self.labels) == len(other.labels)
             and all([label in other.labels for label in self.labels])
         )
@@ -266,7 +269,7 @@ class CellResponse:
                 self.family,
                 self.column_qualifier,
                 self.value,
-                self.timestamp,
+                self.timestamp_ns,
                 tuple(self.labels),
             )
         )
