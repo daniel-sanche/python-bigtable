@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from typing import Sequence
+from functools import total_ordering
 
 # Type aliases used internally for readability.
 row_key = bytes
@@ -37,12 +38,11 @@ class RowResponse(Sequence["CellResponse"]):
     """
 
     def __init__(self, key: row_key, cells: list[CellResponse]):
+        """Expected to be used internally only"""
         self.row_key = key
         self.cells: OrderedDict[
             family_id, OrderedDict[qualifier, list[CellResponse]]
         ] = OrderedDict()
-        """Expected to be used internally only"""
-        pass
 
     def get_cells(
         self, family: str | None, qualifer: str | bytes | None
@@ -57,6 +57,8 @@ class RowResponse(Sequence["CellResponse"]):
 
         Syntactic sugar: cells = row["family", "qualifier"]
         """
+        if family is None and qualifier is not None:
+            raise ValueError("Qualifier passed without family")
         raise NotImplementedError
 
     def get_index(self) -> dict[family_id, list[qualifier]]:
@@ -76,7 +78,7 @@ class RowResponse(Sequence["CellResponse"]):
         """
         raise NotImplementedError
 
-
+@total_ordering
 class CellResponse:
     """
     Model class for cell data
@@ -92,15 +94,18 @@ class CellResponse:
         row: row_key,
         family: family_id,
         column_qualifier: qualifier,
+        timestamp: int,
         labels: list[str] | None = None,
-        timestamp: int | None = None,
     ):
+        """Expected to be used internally only"""
         self.value = value
         self.row_key = row
         self.family = family
         self.column_qualifier = column_qualifier
-        self.labels = labels
+        # keep a utf-8 encoded string for lexical comparison
+        self._column_qualifier_str = column_qualifier.decode("UTF-8")
         self.timestamp = timestamp
+        self.labels = labels if labels is not None else []
 
     def decode_value(self, encoding="UTF-8", errors=None) -> str:
         """decode bytes to string"""
@@ -124,7 +129,18 @@ class CellResponse:
     """For Bigtable native ordering"""
 
     def __lt__(self, other) -> bool:
-        raise NotImplementedError
+        if not isinstance(other, CellResponse):
+            return NotImplemented
+        return (self.family, self._column_qualifier_str, self.timestamp) < \
+            (other.family, other._column_qualifier_str, other.timestamp)
 
     def __eq__(self, other) -> bool:
-        raise NotImplementedError
+        if not isinstance(other, CellResponse):
+            return NotImplemented
+        return self.row_key == other.row_key and \
+                self.family == other.family and \
+                self.column_qualifier == other.column_qualifier and \
+                self.value == other.value and \
+                self.timestamp == other.timestamp and \
+                len(self.labels) == len(other.labels) and \
+                all([l in other.labels for l in self.labels])
