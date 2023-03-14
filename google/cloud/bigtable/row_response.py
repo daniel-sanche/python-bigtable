@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Sequence, Generator, Mapping, overload, Union, List, Tuple
+from typing import Sequence, Generator, Mapping, overload, Union, List, Tuple, Any
 from functools import total_ordering
 
 # Type aliases used internally for readability.
@@ -121,6 +121,24 @@ class RowResponse(
         cell_reprs = [repr(cell) for cell in self._cells_list]
         return f"RowResponse({self.row_key!r}, {cell_reprs})"
 
+    def to_dict(self) -> dict[str -> Any]:
+        """
+        Returns a dictionary representation of the cell in the Bigtable Row
+        proto format
+
+        https://cloud.google.com/bigtable/docs/reference/data/rpc/google.bigtable.v2#row
+        """
+        row_dict = {"key": self.row_key, "families": []}
+        for family in self._cells_map:
+            family_dict = {"name": family, "columns": []}
+            for qualifier in self._cells_map[family]:
+                column_dict = {"qualifier": qualifier, "cells": []}
+                for cell in self._cells_map[family][qualifier]:
+                    column_dict["cells"].append(cell.to_dict())
+                family_dict["columns"].append(column_dict)
+            row_dict["families"].append(family_dict)
+        return row_dict
+
     # Sequence and Mapping methods
     def __iter__(self):
         # iterate as a sequence; yield all cells
@@ -219,6 +237,19 @@ class CellResponse:
         ReadModifyWrite increment rule
         """
         return int.from_bytes(self.value, byteorder="big", signed=True)
+
+    def to_dict(self) -> dict[str -> Any]:
+        """
+        Returns a dictionary representation of the cell in the Bigtable Cell
+        proto format
+
+        https://cloud.google.com/bigtable/docs/reference/data/rpc/google.bigtable.v2#cell
+        """
+        return {
+            "value": self.value,
+            "timestamp_micros": self.timestamp_ns // 1000,
+            "labels": self.labels,
+        }
 
     def __str__(self) -> str:
         """
