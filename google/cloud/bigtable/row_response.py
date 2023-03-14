@@ -121,7 +121,7 @@ class RowResponse(
         cell_reprs = [repr(cell) for cell in self._cells_list]
         return f"RowResponse({self.row_key!r}, {cell_reprs})"
 
-    def to_dict(self) -> dict[str -> Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Returns a dictionary representation of the cell in the Bigtable Row
         proto format
@@ -238,7 +238,7 @@ class CellResponse:
         """
         return int.from_bytes(self.value, byteorder="big", signed=True)
 
-    def to_dict(self) -> dict[str -> Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Returns a dictionary representation of the cell in the Bigtable Cell
         proto format
