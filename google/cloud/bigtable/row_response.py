@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Sequence
+from typing import Sequence, Generator, overload
 from functools import total_ordering
 
 # Type aliases used internally for readability.
@@ -40,12 +40,19 @@ class RowResponse(Sequence["CellResponse"]):
     def __init__(self, key: row_key, cells: list[CellResponse]):
         """Expected to be used internally only"""
         self.row_key = key
-        self.cells: OrderedDict[
-            family_id, OrderedDict[qualifier, list[CellResponse]]
-        ] = OrderedDict()
+        self._cells_map: dict[family_id, dict[qualifier, list[CellResponse]]] = OrderedDict()
+        self._cells_list: list[CellResponse] = []
+        # add cells to internal stores using Bigtable native ordering
+        for cell in sorted(cells):
+            if cell.family not in self._cells_map:
+                self._cells_map[cell.family] = OrderedDict()
+            if cell.column_qualifier not in self._cells_map[cell.family]:
+                self._cells_map[cell.family][cell.column_qualifier] = []
+            self._cells_map[cell.family][cell.column_qualifier].append(cell)
+            self._cells_list.append(cell)
 
     def get_cells(
-        self, family: str | None, qualifer: str | bytes | None
+        self, family: str | None=None, qualifier: str | bytes | None=None
     ) -> list[CellResponse]:
         """
         Returns cells sorted in Bigtable native order:
@@ -57,26 +64,82 @@ class RowResponse(Sequence["CellResponse"]):
 
         Syntactic sugar: cells = row["family", "qualifier"]
         """
-        if family is None and qualifier is not None:
-            raise ValueError("Qualifier passed without family")
-        raise NotImplementedError
+        if family is None:
+            if qualifier is not None:
+                # get_cells(None, "qualifier") is not allowed
+                raise ValueError("Qualifier passed without family")
+            else:
+                # return all cells on get_cells()
+                return self._cells_list
+        if qualifier is None:
+            # return all cells in family on get_cells(family)
+            return list(self._get_all_from_family(family))
+        if isinstance(qualifier, str):
+            qualifier = qualifier.encode("utf-8")
+        # return cells in family and qualifier on get_cells(family, qualifier)
+        return self._cells_map[family][qualifier]
 
-    def get_index(self) -> dict[family_id, list[qualifier]]:
+    def _get_all_from_family(self, family:family_id) -> Generator[CellResponse, None, None]:
+        """
+        Returns all cells in the row
+        """
+        qualifier_dict:dict[qualifier, list[CellResponse]] = self._cells_map.get(family, {})
+        for cell_batch in qualifier_dict.values():
+            for cell in cell_batch:
+                yield cell
+
+    def get_index(self) -> list[tuple[family_id, qualifier]]:
         """
         Returns a list of family and qualifiers for the object
         """
-        raise NotImplementedError
+        index_list = []
+        for family in self._cells_map:
+            for qualifier in self._cells_map[family]:
+                index_list.append((family, qualifier))
+        return index_list
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
         Human-readable string representation
 
-        (family, qualifier)   cells
-        (ABC, XYZ)            [b"123", b"456" ...(+5)]
-        (DEF, XYZ)            [b"123"]
-        (GHI, XYZ)            [b"123", b"456" ...(+2)]
+        (family, qualifier)   num_cells
+        (ABC, XYZ)            14
+        (DEF, XYZ)            102
+        (GHI, XYZ)            9
         """
-        raise NotImplementedError
+        output = []
+        output.append("(family, qualifier)\tnum_cells")
+        if len(self._cells_list) == 0:
+            output.append("-\t0")
+        else:
+            for title in self.get_index():
+                output.append(f"{title}\t{len(self.get_cells(*title))}")
+        return "\n".join(output)
+
+    def __repr__(self):
+        cell_reprs = [repr(cell) for cell in self._cells_list]
+        return f"RowResponse({self.row_key!r}, {cell_reprs})"
+
+    # Sequence methods
+    def __iter__(self):
+        for cell in self._cells_list:
+            yield cell
+
+    @overload
+    def __getitem__(self, index: int, /) -> CellResponse:
+        # overload signature for type checking
+        pass
+
+    @overload
+    def __getitem__(self, index: slice) -> list[CellResponse]:
+        # overload signature for type checking
+        pass
+
+    def __getitem__(self, index):
+        return self._cells_list[index]
+
+    def __len__(self):
+        return len(self._cells_list)
 
 @total_ordering
 class CellResponse:
@@ -125,6 +188,9 @@ class CellResponse:
         Prints encoded byte string, same as printing value directly.
         """
         return str(self.value)
+
+    def __repr__(self):
+        return f"CellResponse(value={self.value!r} row={self.row_key!r}, family={self.family}, column_qualifier={self.column_qualifier!r}, timestamp={self.timestamp}, labels={self.labels})"
 
     """For Bigtable native ordering"""
 
