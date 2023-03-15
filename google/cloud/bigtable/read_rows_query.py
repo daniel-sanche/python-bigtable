@@ -37,8 +37,8 @@ class ReadRowsQuery:
     def __init__(
         self,
         row_keys: list[str | bytes] | str | bytes | None = None,
-        limit:int|None=None,
-        row_filter:RowFilter|dict[str,Any]|None=None,
+        limit: int | None = None,
+        row_filter: RowFilter | dict[str, Any] | None = None,
     ):
         """
         Create a new ReadRowsQuery
@@ -53,12 +53,10 @@ class ReadRowsQuery:
         self.row_ranges: list[tuple[_RangePoint, _RangePoint]] = []
         if row_keys:
             self.add_rows(row_keys)
-        self.limit:int|None = limit
-        self.filter:RowFilter|dict[str,Any] = row_filter
+        self.limit: int | None = limit
+        self.filter: RowFilter | dict[str, Any] = row_filter
 
-
-
-    def set_limit(self, new_limit: int|None):
+    def set_limit(self, new_limit: int | None):
         """
         Set the maximum number of rows to return by this query.
 
@@ -76,9 +74,7 @@ class ReadRowsQuery:
         self._limit = new_limit
         return self
 
-
-
-    def set_filter(self, row_filter: RowFilter|dict|None) -> ReadRowsQuery:
+    def set_filter(self, row_filter: RowFilter | dict | None) -> ReadRowsQuery:
         """
         Set a RowFilter to apply to this query
 
@@ -88,8 +84,14 @@ class ReadRowsQuery:
         Returns:
           - a reference to this query for chaining
         """
-        if not (isinstance(row_filter, dict) or isinstance(row_filter, RowFilter) or row_filter is None):
-            raise ValueError("row_filter must be a RowFilter or corresponding dict representation")
+        if not (
+            isinstance(row_filter, dict)
+            or isinstance(row_filter, RowFilter)
+            or row_filter is None
+        ):
+            raise ValueError(
+                "row_filter must be a RowFilter or corresponding dict representation"
+            )
         self._filter = row_filter
         return self
 
@@ -140,7 +142,9 @@ class ReadRowsQuery:
         if start_is_inclusive is None:
             start_is_inclusive = True
         elif start_key is None:
-            raise ValueError("start_is_inclusive must not be included if start_key is None")
+            raise ValueError(
+                "start_is_inclusive must not be included if start_key is None"
+            )
         if end_is_inclusive is None:
             end_is_inclusive = False
         elif end_key is None:
@@ -155,7 +159,11 @@ class ReadRowsQuery:
         elif end_key is not None and not isinstance(end_key, bytes):
             raise ValueError("end_key must be a string or bytes")
 
-        start_pt = _RangePoint(start_key, start_is_inclusive) if start_key is not None else None
+        start_pt = (
+            _RangePoint(start_key, start_is_inclusive)
+            if start_key is not None
+            else None
+        )
         end_pt = _RangePoint(end_key, end_is_inclusive) if end_key is not None else None
         self.row_ranges.append((start_pt, end_pt))
         return self
@@ -192,7 +200,9 @@ class ReadRowsQuery:
         final_dict = {
             "rows": row_set,
         }
-        dict_filter = self.filter.to_dict() if isinstance(self.filter, RowFilter) else self.filter
+        dict_filter = (
+            self.filter.to_dict() if isinstance(self.filter, RowFilter) else self.filter
+        )
         if dict_filter:
             final_dict["filter"] = dict_filter
         if self.limit is not None:

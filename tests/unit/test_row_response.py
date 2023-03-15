@@ -18,18 +18,19 @@ import unittest
 
 import time
 
-TEST_VALUE = b'1234'
-TEST_ROW_KEY = b'row'
-TEST_FAMILY_ID = 'cf1'
-TEST_QUALIFIER = b'col'
+TEST_VALUE = b"1234"
+TEST_ROW_KEY = b"row"
+TEST_FAMILY_ID = "cf1"
+TEST_QUALIFIER = b"col"
 TEST_TIMESTAMP = time.time_ns()
-TEST_LABELS = ['label1', 'label2']
+TEST_LABELS = ["label1", "label2"]
+
 
 class TestRowResponse(unittest.TestCase):
-
     @staticmethod
     def _get_target_class():
         from google.cloud.bigtable.row_response import RowResponse
+
         return RowResponse
 
     def _make_one(self, *args, **kwargs):
@@ -37,10 +38,17 @@ class TestRowResponse(unittest.TestCase):
             args = (TEST_ROW_KEY, [self._make_cell()])
         return self._get_target_class()(*args, **kwargs)
 
-    def _make_cell(self, value=TEST_VALUE, row_key=TEST_ROW_KEY,
-                   family_id=TEST_FAMILY_ID, qualifier=TEST_QUALIFIER,
-                   timestamp=TEST_TIMESTAMP, labels=TEST_LABELS):
+    def _make_cell(
+        self,
+        value=TEST_VALUE,
+        row_key=TEST_ROW_KEY,
+        family_id=TEST_FAMILY_ID,
+        qualifier=TEST_QUALIFIER,
+        timestamp=TEST_TIMESTAMP,
+        labels=TEST_LABELS,
+    ):
         from google.cloud.bigtable.row_response import CellResponse
+
         return CellResponse(value, row_key, family_id, qualifier, timestamp, labels)
 
     def test_ctor(self):
@@ -50,7 +58,12 @@ class TestRowResponse(unittest.TestCase):
         self.assertEqual(row_response.row_key, TEST_ROW_KEY)
 
     def test_ctor_dict(self):
-        cells = {(TEST_FAMILY_ID, TEST_QUALIFIER): [self._make_cell().to_dict(), self._make_cell().to_dict(use_nanoseconds=True)]}
+        cells = {
+            (TEST_FAMILY_ID, TEST_QUALIFIER): [
+                self._make_cell().to_dict(),
+                self._make_cell().to_dict(use_nanoseconds=True),
+            ]
+        }
         row_response = self._make_one(TEST_ROW_KEY, cells)
         self.assertEqual(row_response.row_key, TEST_ROW_KEY)
         self.assertEqual(len(row_response), 2)
@@ -62,18 +75,18 @@ class TestRowResponse(unittest.TestCase):
             self.assertEqual(row_response[i].labels, TEST_LABELS)
         self.assertEqual(row_response[0].timestamp_ns, TEST_TIMESTAMP)
         # second cell was initialized with use_nanoseconds=False, so it doesn't have full precision
-        self.assertEqual(row_response[1].timestamp_ns, TEST_TIMESTAMP//1000 * 1000)
+        self.assertEqual(row_response[1].timestamp_ns, TEST_TIMESTAMP // 1000 * 1000)
 
     def test_ctor_bad_cell(self):
         cells = [self._make_cell(), self._make_cell()]
-        cells[1].row_key = b'other'
+        cells[1].row_key = b"other"
         with self.assertRaises(ValueError):
             self._make_one(TEST_ROW_KEY, cells)
 
     def test_cell_order(self):
         # cells should be ordered on init
-        cell1 = self._make_cell(value=b'1')
-        cell2 = self._make_cell(value=b'2')
+        cell1 = self._make_cell(value=b"1")
+        cell2 = self._make_cell(value=b"2")
         resp = self._make_one(TEST_ROW_KEY, [cell2, cell1])
         output = list(resp)
         self.assertEqual(output, [cell1, cell2])
@@ -115,12 +128,19 @@ class TestRowResponse(unittest.TestCase):
     def test__repr__(self):
         from google.cloud.bigtable.row_response import CellResponse
         from google.cloud.bigtable.row_response import RowResponse
-        cell_str = "{'value': b'1234', 'timestamp_ns': %d, 'labels': ['label1', 'label2']}" % (TEST_TIMESTAMP)
+
+        cell_str = (
+            "{'value': b'1234', 'timestamp_ns': %d, 'labels': ['label1', 'label2']}"
+            % (TEST_TIMESTAMP)
+        )
         expected_prefix = f"RowResponse(key=b'row', cells="
         row = self._make_one(TEST_ROW_KEY, [self._make_cell()])
         self.assertIn(expected_prefix, repr(row))
         self.assertIn(cell_str, repr(row))
-        expected_full = "RowResponse(key=b'row', cells={\n  ('cf1', b'col'): [{'value': b'1234', 'timestamp_ns': %d, 'labels': ['label1', 'label2']}],\n})" % (TEST_TIMESTAMP)
+        expected_full = (
+            "RowResponse(key=b'row', cells={\n  ('cf1', b'col'): [{'value': b'1234', 'timestamp_ns': %d, 'labels': ['label1', 'label2']}],\n})"
+            % (TEST_TIMESTAMP)
+        )
         self.assertEqual(expected_full, repr(row))
         # should be able to construct instance from __repr__
         result = eval(repr(row))
@@ -140,32 +160,57 @@ class TestRowResponse(unittest.TestCase):
         self.assertIsInstance(result[1], CellResponse)
 
     def test___str__(self):
-        cells = {("3", TEST_QUALIFIER): [self._make_cell().to_dict(), self._make_cell().to_dict(), self._make_cell().to_dict()]}
+        cells = {
+            ("3", TEST_QUALIFIER): [
+                self._make_cell().to_dict(),
+                self._make_cell().to_dict(),
+                self._make_cell().to_dict(),
+            ]
+        }
         cells[("1", TEST_QUALIFIER)] = [self._make_cell().to_dict()]
 
         row_response = self._make_one(TEST_ROW_KEY, cells)
-        expected = "{\n" + \
-        "  (family='1', qualifier=b'col'): [b'1234'],\n" + \
-        "  (family='3', qualifier=b'col'): [b'1234', (+2 more)],\n" + \
-        "}"
+        expected = (
+            "{\n"
+            + "  (family='1', qualifier=b'col'): [b'1234'],\n"
+            + "  (family='3', qualifier=b'col'): [b'1234', (+2 more)],\n"
+            + "}"
+        )
         self.assertEqual(expected, str(row_response))
-
 
     def test_to_dict(self):
         from google.cloud.bigtable_v2.types import Row, Family, Column, Cell
+
         cell1 = self._make_cell()
         cell2 = self._make_cell()
-        cell2.value = b'other'
+        cell2.value = b"other"
         row = self._make_one(TEST_ROW_KEY, [cell1, cell2])
         row_dict = row.to_dict()
-        expected_dict = { 'key': TEST_ROW_KEY, 'families': [
-            {"name": TEST_FAMILY_ID, "columns": [
-                {"qualifier": TEST_QUALIFIER, "cells": [
-                    {"value": TEST_VALUE, "timestamp_micros": TEST_TIMESTAMP//1000, "labels": TEST_LABELS},
-                    {"value": b"other", "timestamp_micros": TEST_TIMESTAMP//1000, "labels": TEST_LABELS}
-                ]}
-            ]},
-        ]}
+        expected_dict = {
+            "key": TEST_ROW_KEY,
+            "families": [
+                {
+                    "name": TEST_FAMILY_ID,
+                    "columns": [
+                        {
+                            "qualifier": TEST_QUALIFIER,
+                            "cells": [
+                                {
+                                    "value": TEST_VALUE,
+                                    "timestamp_micros": TEST_TIMESTAMP // 1000,
+                                    "labels": TEST_LABELS,
+                                },
+                                {
+                                    "value": b"other",
+                                    "timestamp_micros": TEST_TIMESTAMP // 1000,
+                                    "labels": TEST_LABELS,
+                                },
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
         self.assertEqual(len(row_dict), len(expected_dict))
         for key, value in expected_dict.items():
             self.assertEqual(row_dict[key], value)
@@ -180,19 +225,20 @@ class TestRowResponse(unittest.TestCase):
         self.assertEqual(column.qualifier, TEST_QUALIFIER)
         self.assertEqual(len(column.cells), 2)
         self.assertEqual(column.cells[0].value, TEST_VALUE)
-        self.assertEqual(column.cells[0].timestamp_micros, TEST_TIMESTAMP//1000)
+        self.assertEqual(column.cells[0].timestamp_micros, TEST_TIMESTAMP // 1000)
         self.assertEqual(column.cells[0].labels, TEST_LABELS)
         self.assertEqual(column.cells[1].value, cell2.value)
-        self.assertEqual(column.cells[1].timestamp_micros, TEST_TIMESTAMP//1000)
+        self.assertEqual(column.cells[1].timestamp_micros, TEST_TIMESTAMP // 1000)
         self.assertEqual(column.cells[1].labels, TEST_LABELS)
 
     def test_iteration(self):
         from types import GeneratorType
         from google.cloud.bigtable.row_response import CellResponse
+
         # should be able to iterate over the RowResponse as a list
-        cell3 = self._make_cell(value=b'3')
-        cell1 = self._make_cell(value=b'1')
-        cell2 = self._make_cell(value=b'2')
+        cell3 = self._make_cell(value=b"3")
+        cell1 = self._make_cell(value=b"1")
+        cell2 = self._make_cell(value=b"2")
         row_response = self._make_one(TEST_ROW_KEY, [cell3, cell1, cell2])
         self.assertEqual(len(row_response), 3)
         # should create generator object
@@ -204,51 +250,77 @@ class TestRowResponse(unittest.TestCase):
         for cell in row_response:
             self.assertIsInstance(cell, CellResponse)
             self.assertEqual(cell.value, result_list[idx].value)
-            self.assertEqual(cell.value, str(idx+1).encode())
-            idx+=1
-
+            self.assertEqual(cell.value, str(idx + 1).encode())
+            idx += 1
 
     def test_contains_cell(self):
-        cell3 = self._make_cell(value=b'3')
-        cell1 = self._make_cell(value=b'1')
-        cell2 = self._make_cell(value=b'2')
-        cell4 = self._make_cell(value=b'4')
+        cell3 = self._make_cell(value=b"3")
+        cell1 = self._make_cell(value=b"1")
+        cell2 = self._make_cell(value=b"2")
+        cell4 = self._make_cell(value=b"4")
         row_response = self._make_one(TEST_ROW_KEY, [cell3, cell1, cell2])
         self.assertIn(cell1, row_response)
         self.assertIn(cell2, row_response)
         self.assertNotIn(cell4, row_response)
-        cell3_copy = self._make_cell(value=b'3')
+        cell3_copy = self._make_cell(value=b"3")
         self.assertIn(cell3_copy, row_response)
 
     def test_contains_family_id(self):
-        new_family_id = 'new_family_id'
-        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
-        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        new_family_id = "new_family_id"
+        cell = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
+        cell2 = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            new_family_id,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         row_response = self._make_one(TEST_ROW_KEY, [cell, cell2])
         self.assertIn(TEST_FAMILY_ID, row_response)
         self.assertIn("new_family_id", row_response)
         self.assertIn(new_family_id, row_response)
-        self.assertNotIn('not_a_family_id', row_response)
+        self.assertNotIn("not_a_family_id", row_response)
         self.assertNotIn(None, row_response)
 
     def test_contains_family_qualifier_tuple(self):
-        new_family_id = 'new_family_id'
-        new_qualifier = b'new_qualifier'
-        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
-        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, new_qualifier, TEST_TIMESTAMP, TEST_LABELS)
+        new_family_id = "new_family_id"
+        new_qualifier = b"new_qualifier"
+        cell = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
+        cell2 = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            new_family_id,
+            new_qualifier,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         row_response = self._make_one(TEST_ROW_KEY, [cell, cell2])
         self.assertIn((TEST_FAMILY_ID, TEST_QUALIFIER), row_response)
         self.assertIn(("new_family_id", "new_qualifier"), row_response)
         self.assertIn(("new_family_id", b"new_qualifier"), row_response)
         self.assertIn((new_family_id, new_qualifier), row_response)
 
-        self.assertNotIn(('not_a_family_id', TEST_QUALIFIER), row_response)
-        self.assertNotIn((TEST_FAMILY_ID, 'not_a_qualifier'), row_response)
+        self.assertNotIn(("not_a_family_id", TEST_QUALIFIER), row_response)
+        self.assertNotIn((TEST_FAMILY_ID, "not_a_qualifier"), row_response)
         self.assertNotIn((TEST_FAMILY_ID, new_qualifier), row_response)
-        self.assertNotIn(('not_a_family_id', 'not_a_qualifier'), row_response)
+        self.assertNotIn(("not_a_family_id", "not_a_qualifier"), row_response)
         self.assertNotIn((None, None), row_response)
         self.assertNotIn(None, row_response)
-
 
     def test_int_indexing(self):
         # should be able to index into underlying list with an index number directly
@@ -259,12 +331,11 @@ class TestRowResponse(unittest.TestCase):
         for i in range(10):
             self.assertEqual(row_response[i].value, str(i).encode())
             # backwards indexing should work
-            self.assertEqual(row_response[-i-1].value, str(9-i).encode())
+            self.assertEqual(row_response[-i - 1].value, str(9 - i).encode())
         with self.assertRaises(IndexError):
             row_response[10]
         with self.assertRaises(IndexError):
             row_response[-11]
-
 
     def test_slice_indexing(self):
         # should be able to index with a range of indices
@@ -291,10 +362,31 @@ class TestRowResponse(unittest.TestCase):
 
     def test_family_indexing(self):
         # should be able to retrieve cells in a family
-        new_family_id = 'new_family_id'
-        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
-        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
-        cell3 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        new_family_id = "new_family_id"
+        cell = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
+        cell2 = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
+        cell3 = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            new_family_id,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         row_response = self._make_one(TEST_ROW_KEY, [cell, cell2, cell3])
 
         self.assertEqual(len(row_response[TEST_FAMILY_ID]), 2)
@@ -303,19 +395,40 @@ class TestRowResponse(unittest.TestCase):
         self.assertEqual(len(row_response[new_family_id]), 1)
         self.assertEqual(row_response[new_family_id][0], cell3)
         with self.assertRaises(ValueError):
-            row_response['not_a_family_id']
+            row_response["not_a_family_id"]
         with self.assertRaises(TypeError):
             row_response[None]
         with self.assertRaises(TypeError):
-            row_response[b'new_family_id']
+            row_response[b"new_family_id"]
 
     def test_family_qualifier_indexing(self):
         # should be able to retrieve cells in a family/qualifier tuplw
-        new_family_id = 'new_family_id'
-        new_qualifier = b'new_qualifier'
-        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
-        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
-        cell3 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, new_qualifier, TEST_TIMESTAMP, TEST_LABELS)
+        new_family_id = "new_family_id"
+        new_qualifier = b"new_qualifier"
+        cell = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
+        cell2 = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
+        cell3 = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            new_family_id,
+            new_qualifier,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         row_response = self._make_one(TEST_ROW_KEY, [cell, cell2, cell3])
 
         self.assertEqual(len(row_response[TEST_FAMILY_ID, TEST_QUALIFIER]), 2)
@@ -323,29 +436,52 @@ class TestRowResponse(unittest.TestCase):
         self.assertEqual(row_response[TEST_FAMILY_ID, TEST_QUALIFIER][1], cell2)
         self.assertEqual(len(row_response[new_family_id, new_qualifier]), 1)
         self.assertEqual(row_response[new_family_id, new_qualifier][0], cell3)
-        self.assertEqual(len(row_response['new_family_id', 'new_qualifier']), 1)
-        self.assertEqual(len(row_response['new_family_id', b'new_qualifier']), 1)
+        self.assertEqual(len(row_response["new_family_id", "new_qualifier"]), 1)
+        self.assertEqual(len(row_response["new_family_id", b"new_qualifier"]), 1)
         with self.assertRaises(ValueError):
-            row_response[new_family_id, 'not_a_qualifier']
+            row_response[new_family_id, "not_a_qualifier"]
         with self.assertRaises(ValueError):
-            row_response['not_a_family_id', new_qualifier]
+            row_response["not_a_family_id", new_qualifier]
         with self.assertRaises(TypeError):
             row_response[None, None]
         with self.assertRaises(TypeError):
-            row_response[b'new_family_id', b'new_qualifier']
-
+            row_response[b"new_family_id", b"new_qualifier"]
 
     def test_keys(self):
         # should be able to retrieve (family,qualifier) tuples as keys
-        new_family_id = 'new_family_id'
-        new_qualifier = b'new_qualifier'
-        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
-        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
-        cell3 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, new_qualifier, TEST_TIMESTAMP, TEST_LABELS)
+        new_family_id = "new_family_id"
+        new_qualifier = b"new_qualifier"
+        cell = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
+        cell2 = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
+        cell3 = self._make_cell(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            new_family_id,
+            new_qualifier,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         row_response = self._make_one(TEST_ROW_KEY, [cell, cell2, cell3])
 
         self.assertEqual(len(row_response.keys()), 2)
-        self.assertEqual(row_response.keys(), [(TEST_FAMILY_ID, TEST_QUALIFIER), (new_family_id, new_qualifier)])
+        self.assertEqual(
+            row_response.keys(),
+            [(TEST_FAMILY_ID, TEST_QUALIFIER), (new_family_id, new_qualifier)],
+        )
 
         row_response = self._make_one(TEST_ROW_KEY, [])
         self.assertEqual(len(row_response.keys()), 0)
@@ -357,7 +493,7 @@ class TestRowResponse(unittest.TestCase):
 
     def test_values(self):
         # values should return the list of all cells
-        cell_list = [self._make_cell( qualifier=str(i).encode()) for i in range(10)]
+        cell_list = [self._make_cell(qualifier=str(i).encode()) for i in range(10)]
         row_response = self._make_one(TEST_ROW_KEY, cell_list)
         sorted(cell_list)
 
@@ -370,7 +506,9 @@ class TestRowResponse(unittest.TestCase):
         row_response = self._make_one(TEST_ROW_KEY, cell_list)
 
         self.assertEqual(len(list(row_response.items())), 1)
-        self.assertEqual(list(row_response.items())[0][0], (TEST_FAMILY_ID, TEST_QUALIFIER))
+        self.assertEqual(
+            list(row_response.items())[0][0], (TEST_FAMILY_ID, TEST_QUALIFIER)
+        )
         self.assertEqual(list(row_response.items())[0][1], cell_list)
 
         row_response = self._make_one(TEST_ROW_KEY, [])
@@ -386,7 +524,6 @@ class TestRowResponse(unittest.TestCase):
             self.assertEqual(keys[i], (TEST_FAMILY_ID, str(i).encode()))
             self.assertEqual(len(cells[i]), 1)
             self.assertEqual(cells[i][0], cell_list[i])
-
 
     def test_index_of(self):
         # given a cell, should find index in underlying list
@@ -404,19 +541,33 @@ class TestRowResponse(unittest.TestCase):
 
 
 class TestCellResponse(unittest.TestCase):
-
     @staticmethod
     def _get_target_class():
         from google.cloud.bigtable.row_response import CellResponse
+
         return CellResponse
 
     def _make_one(self, *args, **kwargs):
         if len(args) == 0:
-            args = (TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+            args = (
+                TEST_VALUE,
+                TEST_ROW_KEY,
+                TEST_FAMILY_ID,
+                TEST_QUALIFIER,
+                TEST_TIMESTAMP,
+                TEST_LABELS,
+            )
         return self._get_target_class()(*args, **kwargs)
 
     def test_ctor(self):
-        cell = self._make_one(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        cell = self._make_one(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         self.assertEqual(cell.value, TEST_VALUE)
         self.assertEqual(cell.row_key, TEST_ROW_KEY)
         self.assertEqual(cell.family, TEST_FAMILY_ID)
@@ -426,45 +577,73 @@ class TestCellResponse(unittest.TestCase):
 
     def test_to_dict(self):
         from google.cloud.bigtable_v2.types import Cell
+
         cell = self._make_one()
         cell_dict = cell.to_dict()
-        expected_dict = { 'value': TEST_VALUE, 'timestamp_micros': TEST_TIMESTAMP//1000, 'labels': TEST_LABELS }
+        expected_dict = {
+            "value": TEST_VALUE,
+            "timestamp_micros": TEST_TIMESTAMP // 1000,
+            "labels": TEST_LABELS,
+        }
         self.assertEqual(len(cell_dict), len(expected_dict))
         for key, value in expected_dict.items():
             self.assertEqual(cell_dict[key], value)
         # should be able to construct a Cell proto from the dict
         cell_proto = Cell(**cell_dict)
         self.assertEqual(cell_proto.value, TEST_VALUE)
-        self.assertEqual(cell_proto.timestamp_micros, TEST_TIMESTAMP//1000)
+        self.assertEqual(cell_proto.timestamp_micros, TEST_TIMESTAMP // 1000)
         self.assertEqual(cell_proto.labels, TEST_LABELS)
 
     def test_to_dict_nanos_timestamp(self):
         from google.cloud.bigtable_v2.types import Cell
+
         cell = self._make_one()
         cell_dict = cell.to_dict(use_nanoseconds=True)
-        expected_dict = { 'value': TEST_VALUE, "timestamp_ns": TEST_TIMESTAMP, 'labels': TEST_LABELS }
+        expected_dict = {
+            "value": TEST_VALUE,
+            "timestamp_ns": TEST_TIMESTAMP,
+            "labels": TEST_LABELS,
+        }
         self.assertEqual(len(cell_dict), len(expected_dict))
         for key, value in expected_dict.items():
             self.assertEqual(cell_dict[key], value)
 
     def test_to_dict_no_labels(self):
         from google.cloud.bigtable_v2.types import Cell
-        cell_no_labels = self._make_one(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, None)
+
+        cell_no_labels = self._make_one(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            None,
+        )
         cell_dict = cell_no_labels.to_dict()
-        expected_dict = { 'value': TEST_VALUE, 'timestamp_micros': TEST_TIMESTAMP//1000 }
+        expected_dict = {
+            "value": TEST_VALUE,
+            "timestamp_micros": TEST_TIMESTAMP // 1000,
+        }
         self.assertEqual(len(cell_dict), len(expected_dict))
         for key, value in expected_dict.items():
             self.assertEqual(cell_dict[key], value)
         # should be able to construct a Cell proto from the dict
         cell_proto = Cell(**cell_dict)
         self.assertEqual(cell_proto.value, TEST_VALUE)
-        self.assertEqual(cell_proto.timestamp_micros, TEST_TIMESTAMP//1000)
+        self.assertEqual(cell_proto.timestamp_micros, TEST_TIMESTAMP // 1000)
         self.assertEqual(cell_proto.labels, [])
 
     def test_int_value(self):
         test_int = 1234
-        bytes_value = test_int.to_bytes(4, 'big', signed=True)
-        cell = self._make_one(bytes_value, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        bytes_value = test_int.to_bytes(4, "big", signed=True)
+        cell = self._make_one(
+            bytes_value,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         self.assertEqual(int(cell), test_int)
         # ensure string formatting works
         formatted = "%d" % cell
@@ -473,8 +652,15 @@ class TestCellResponse(unittest.TestCase):
 
     def test_int_value_negative(self):
         test_int = -99999
-        bytes_value = test_int.to_bytes(4, 'big', signed=True)
-        cell = self._make_one(bytes_value, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        bytes_value = test_int.to_bytes(4, "big", signed=True)
+        cell = self._make_one(
+            bytes_value,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         self.assertEqual(int(cell), test_int)
         # ensure string formatting works
         formatted = "%d" % cell
@@ -482,17 +668,27 @@ class TestCellResponse(unittest.TestCase):
         self.assertEqual(int(formatted), test_int)
 
     def test___str__(self):
-        test_value = b'helloworld'
-        cell = self._make_one(test_value, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        test_value = b"helloworld"
+        cell = self._make_one(
+            test_value,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         self.assertEqual(str(cell), "b'helloworld'")
         self.assertEqual(str(cell), str(test_value))
 
     def test___repr__(self):
         from google.cloud.bigtable.row_response import CellResponse
+
         cell = self._make_one()
-        expected = "CellResponse(value=b'1234', row=b'row', " + \
-            "family='cf1', column_qualifier=b'col', " + \
-            f"timestamp_ns={TEST_TIMESTAMP}, labels=['label1', 'label2'])"
+        expected = (
+            "CellResponse(value=b'1234', row=b'row', "
+            + "family='cf1', column_qualifier=b'col', "
+            + f"timestamp_ns={TEST_TIMESTAMP}, labels=['label1', 'label2'])"
+        )
         self.assertEqual(repr(cell), expected)
         # should be able to construct instance from __repr__
         result = eval(repr(cell))
@@ -500,10 +696,20 @@ class TestCellResponse(unittest.TestCase):
 
     def test___repr___no_labels(self):
         from google.cloud.bigtable.row_response import CellResponse
-        cell_no_labels = self._make_one(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, None)
-        expected = "CellResponse(value=b'1234', row=b'row', " + \
-            "family='cf1', column_qualifier=b'col', " + \
-            f"timestamp_ns={TEST_TIMESTAMP}, labels=[])"
+
+        cell_no_labels = self._make_one(
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            None,
+        )
+        expected = (
+            "CellResponse(value=b'1234', row=b'row', "
+            + "family='cf1', column_qualifier=b'col', "
+            + f"timestamp_ns={TEST_TIMESTAMP}, labels=[])"
+        )
         self.assertEqual(repr(cell_no_labels), expected)
         # should be able to construct instance from __repr__
         result = eval(repr(cell_no_labels))
@@ -514,10 +720,17 @@ class TestCellResponse(unittest.TestCase):
         cell2 = self._make_one()
         self.assertEqual(cell1, cell2)
         self.assertTrue(cell1 == cell2)
-        args = (TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        args = (
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         for i in range(0, len(args)):
             # try changing each argument
-            modified_cell = self._make_one(*args[:i], args[i]+args[i], *args[i+1:])
+            modified_cell = self._make_one(*args[:i], args[i] + args[i], *args[i + 1 :])
             self.assertNotEqual(cell1, modified_cell)
             self.assertFalse(cell1 == modified_cell)
             self.assertTrue(cell1 != modified_cell)
@@ -529,10 +742,17 @@ class TestCellResponse(unittest.TestCase):
         cell2 = self._make_one()
         self.assertEqual(d[cell2], 1)
 
-        args = (TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        args = (
+            TEST_VALUE,
+            TEST_ROW_KEY,
+            TEST_FAMILY_ID,
+            TEST_QUALIFIER,
+            TEST_TIMESTAMP,
+            TEST_LABELS,
+        )
         for i in range(0, len(args)):
             # try changing each argument
-            modified_cell = self._make_one(*args[:i], args[i]+args[i], *args[i+1:])
+            modified_cell = self._make_one(*args[:i], args[i] + args[i], *args[i + 1 :])
             with self.assertRaises(KeyError):
                 d[modified_cell]
 
@@ -543,13 +763,24 @@ class TestCellResponse(unittest.TestCase):
         # families; alphebetical order
         for family in ["z", "y", "x"]:
             # qualifiers; lowest byte value first
-            for qualifier in [b'z', b'y', b'x']:
+            for qualifier in [b"z", b"y", b"x"]:
                 # timestamps; newest first
-                for timestamp in [TEST_TIMESTAMP, TEST_TIMESTAMP+1, TEST_TIMESTAMP+2]:
-                    cell = self._make_one(TEST_VALUE, TEST_ROW_KEY, family, qualifier, timestamp, TEST_LABELS)
+                for timestamp in [
+                    TEST_TIMESTAMP,
+                    TEST_TIMESTAMP + 1,
+                    TEST_TIMESTAMP + 2,
+                ]:
+                    cell = self._make_one(
+                        TEST_VALUE,
+                        TEST_ROW_KEY,
+                        family,
+                        qualifier,
+                        timestamp,
+                        TEST_LABELS,
+                    )
                     # cell should be the highest priority encountered so far
                     self.assertEqual(i, len(higher_cells))
-                    i+=1
+                    i += 1
                     for other in higher_cells:
                         self.assertLess(cell, other)
                     higher_cells.append(cell)
@@ -557,5 +788,3 @@ class TestCellResponse(unittest.TestCase):
         expected_order = higher_cells
         expected_order.reverse()
         self.assertEqual(expected_order, sorted(higher_cells))
-
-

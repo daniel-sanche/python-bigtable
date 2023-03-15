@@ -42,7 +42,12 @@ class RowResponse(
     cells = row["family", "qualifier"]
     """
 
-    def __init__(self, key: row_key, cells: list[CellResponse]|dict[tuple[family_id, qualifier], list[CellResponse]]):
+    def __init__(
+        self,
+        key: row_key,
+        cells: list[CellResponse]
+        | dict[tuple[family_id, qualifier], list[CellResponse]],
+    ):
         """Expected to be used internally only"""
         self.row_key = key
         self._cells_map: dict[
@@ -54,16 +59,27 @@ class RowResponse(
             tmp_list = []
             for (family, qualifier), cell_list in cells.items():
                 for cell in cell_list:
-                    timestamp = cell.get("timestamp_ns", 1000*cell.get("timestamp_micros", -1))
+                    timestamp = cell.get(
+                        "timestamp_ns", 1000 * cell.get("timestamp_micros", -1)
+                    )
                     if timestamp < 0:
                         raise ValueError("invalid timestamp")
-                    cell = CellResponse(cell["value"], key, family, qualifier, timestamp, cell.get("labels",None))
+                    cell = CellResponse(
+                        cell["value"],
+                        key,
+                        family,
+                        qualifier,
+                        timestamp,
+                        cell.get("labels", None),
+                    )
                     tmp_list.append(cell)
             cells = tmp_list
         # add cells to internal stores using Bigtable native ordering
         for cell in sorted(cells):
             if cell.row_key != self.row_key:
-                raise ValueError(f"CellResponse row_key ({cell.row_key}) does not match RowResponse key ({self.row_key})")
+                raise ValueError(
+                    f"CellResponse row_key ({cell.row_key}) does not match RowResponse key ({self.row_key})"
+                )
             if cell.family not in self._cells_map:
                 self._cells_map[cell.family] = OrderedDict()
             if cell.column_qualifier not in self._cells_map[cell.family]:
@@ -102,7 +118,9 @@ class RowResponse(
         if family not in self._cells_map:
             raise ValueError(f"Family '{family}' not found in row '{self.row_key}'")
         if qualifier not in self._cells_map[family]:
-            raise ValueError(f"Qualifier '{qualifier}' not found in family '{family}' in row '{self.row_key}'")
+            raise ValueError(
+                f"Qualifier '{qualifier}' not found in family '{family}' in row '{self.row_key}'"
+            )
         return self._cells_map[family][qualifier]
 
     def _get_all_from_family(
@@ -132,9 +150,13 @@ class RowResponse(
             if len(self[key]) == 0:
                 output.append(f"  {key}: []")
             elif len(self[key]) == 1:
-                output.append(f"  (family='{key[0]}', qualifier={key[1]}): [{self[key][0]}],")
+                output.append(
+                    f"  (family='{key[0]}', qualifier={key[1]}): [{self[key][0]}],"
+                )
             else:
-                output.append(f"  (family='{key[0]}', qualifier={key[1]}): [{self[key][0]}, (+{len(self[key])-1} more)],")
+                output.append(
+                    f"  (family='{key[0]}', qualifier={key[1]}): [{self[key][0]}, (+{len(self[key])-1} more)],"
+                )
         output.append("}")
         return "\n".join(output)
 
@@ -218,7 +240,9 @@ class RowResponse(
             # index is int or slice
             return self._cells_list[index]
         else:
-            raise TypeError("Index must be family_id, (family_id, qualifier), int, or slice")
+            raise TypeError(
+                "Index must be family_id, (family_id, qualifier), int, or slice"
+            )
 
     def __len__(self):
         return len(self._cells_list)
@@ -328,8 +352,20 @@ class CellResponse:
     def __lt__(self, other) -> bool:
         if not isinstance(other, CellResponse):
             return NotImplemented
-        this_ordering = (self.family, self.column_qualifier, -self.timestamp_ns, self.value, self.labels)
-        other_ordering = (other.family, other.column_qualifier, -other.timestamp_ns, other.value, other.labels)
+        this_ordering = (
+            self.family,
+            self.column_qualifier,
+            -self.timestamp_ns,
+            self.value,
+            self.labels,
+        )
+        other_ordering = (
+            other.family,
+            other.column_qualifier,
+            -other.timestamp_ns,
+            other.value,
+            other.labels,
+        )
         return this_ordering < other_ordering
 
     def __eq__(self, other) -> bool:

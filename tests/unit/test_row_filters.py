@@ -32,6 +32,7 @@ def test_bool_filter___eq__type_differ():
     row_filter2 = object()
     assert not (row_filter1 == row_filter2)
 
+
 def test_bool_filter___eq__same_value():
     from google.cloud.bigtable.row_filters import _BoolFilter
 
@@ -59,6 +60,7 @@ def test_sink_filter_to_pb():
     expected_pb = _RowFilterPB(sink=flag)
     assert pb_val == expected_pb
 
+
 def test_sink_filter_to_dict():
     from google.cloud.bigtable.row_filters import SinkFilter
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
@@ -70,6 +72,7 @@ def test_sink_filter_to_dict():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_pass_all_filter_to_pb():
     from google.cloud.bigtable.row_filters import PassAllFilter
 
@@ -78,6 +81,7 @@ def test_pass_all_filter_to_pb():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(pass_all_filter=flag)
     assert pb_val == expected_pb
+
 
 def test_pass_all_filter_to_dict():
     from google.cloud.bigtable.row_filters import PassAllFilter
@@ -90,6 +94,7 @@ def test_pass_all_filter_to_dict():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_block_all_filter_to_pb():
     from google.cloud.bigtable.row_filters import BlockAllFilter
 
@@ -98,6 +103,7 @@ def test_block_all_filter_to_pb():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(block_all_filter=flag)
     assert pb_val == expected_pb
+
 
 def test_block_all_filter_to_dict():
     from google.cloud.bigtable.row_filters import BlockAllFilter
@@ -162,6 +168,7 @@ def test_row_key_regex_filter_to_pb():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(row_key_regex_filter=regex)
     assert pb_val == expected_pb
+
 
 def test_row_key_regex_filter_to_dict():
     from google.cloud.bigtable.row_filters import RowKeyRegexFilter
@@ -230,6 +237,7 @@ def test_family_name_regex_filter_to_pb():
     expected_pb = _RowFilterPB(family_name_regex_filter=regex)
     assert pb_val == expected_pb
 
+
 def test_family_name_regex_filter_to_dict():
     from google.cloud.bigtable.row_filters import FamilyNameRegexFilter
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
@@ -241,6 +249,7 @@ def test_family_name_regex_filter_to_dict():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_column_qualifier_regex_filter_to_pb():
     from google.cloud.bigtable.row_filters import ColumnQualifierRegexFilter
 
@@ -249,6 +258,7 @@ def test_column_qualifier_regex_filter_to_pb():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(column_qualifier_regex_filter=regex)
     assert pb_val == expected_pb
+
 
 def test_column_qualifier_regex_filter_to_dict():
     from google.cloud.bigtable.row_filters import ColumnQualifierRegexFilter
@@ -331,16 +341,23 @@ def test_timestamp_range_to_pb():
     pb_kwargs["end_timestamp_micros"] = end_millis
     _timestamp_range_to_pb_helper(pb_kwargs, start=start_micros, end=end_micros)
 
+
 def test_timestamp_range_to_dict():
     from google.cloud.bigtable.row_filters import TimestampRange
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
     import datetime
 
-    row_filter = TimestampRange(start=datetime.datetime(2019, 1, 1), end=datetime.datetime(2019, 1, 2))
-    expected_dict = {"start_timestamp_micros": 1546300800000000, "end_timestamp_micros": 1546387200000000}
+    row_filter = TimestampRange(
+        start=datetime.datetime(2019, 1, 1), end=datetime.datetime(2019, 1, 2)
+    )
+    expected_dict = {
+        "start_timestamp_micros": 1546300800000000,
+        "end_timestamp_micros": 1546387200000000,
+    }
     assert row_filter.to_dict() == expected_dict
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.TimestampRange(**expected_dict) == expected_pb_value
+
 
 def test_timestamp_range_to_pb_start_only():
     # Makes sure already milliseconds granularity
@@ -350,6 +367,7 @@ def test_timestamp_range_to_pb_start_only():
     pb_kwargs = {}
     pb_kwargs["start_timestamp_micros"] = start_millis
     _timestamp_range_to_pb_helper(pb_kwargs, start=start_micros, end=None)
+
 
 def test_timestamp_range_to_dict_start_only():
     from google.cloud.bigtable.row_filters import TimestampRange
@@ -362,6 +380,7 @@ def test_timestamp_range_to_dict_start_only():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.TimestampRange(**expected_dict) == expected_pb_value
 
+
 def test_timestamp_range_to_pb_end_only():
     # Makes sure already milliseconds granularity
     end_micros = 12939371000
@@ -370,6 +389,7 @@ def test_timestamp_range_to_pb_end_only():
     pb_kwargs = {}
     pb_kwargs["end_timestamp_micros"] = end_millis
     _timestamp_range_to_pb_helper(pb_kwargs, start=None, end=end_micros)
+
 
 def test_timestamp_range_to_dict_end_only():
     from google.cloud.bigtable.row_filters import TimestampRange
@@ -420,19 +440,25 @@ def test_timestamp_range_filter_to_pb():
     expected_pb = _RowFilterPB(timestamp_range_filter=_TimestampRangePB())
     assert pb_val == expected_pb
 
+
 def test_timestamp_range_filter_to_dict():
     from google.cloud.bigtable.row_filters import TimestampRangeFilter
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
     import datetime
 
-    row_filter = TimestampRangeFilter(start=datetime.datetime(2019, 1, 1), end=datetime.datetime(2019, 1, 2))
-    expected_dict = {"timestamp_range_filter":
-        {"start_timestamp_micros": 1546300800000000,
-        "end_timestamp_micros": 1546387200000000}
+    row_filter = TimestampRangeFilter(
+        start=datetime.datetime(2019, 1, 1), end=datetime.datetime(2019, 1, 2)
+    )
+    expected_dict = {
+        "timestamp_range_filter": {
+            "start_timestamp_micros": 1546300800000000,
+            "end_timestamp_micros": 1546387200000000,
+        }
     }
     assert row_filter.to_dict() == expected_dict
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
+
 
 def test_timestamp_range_filter_empty_to_dict():
     from google.cloud.bigtable.row_filters import TimestampRangeFilter
@@ -564,6 +590,7 @@ def test_column_range_filter_to_pb():
     expected_pb = _RowFilterPB(column_range_filter=col_range_pb)
     assert row_filter.to_pb() == expected_pb
 
+
 def test_column_range_filter_to_dict():
     from google.cloud.bigtable.row_filters import ColumnRangeFilter
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
@@ -574,6 +601,7 @@ def test_column_range_filter_to_dict():
     assert row_filter.to_dict() == expected_dict
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
+
 
 def test_column_range_filter_to_pb_inclusive_start():
     from google.cloud.bigtable.row_filters import ColumnRangeFilter
@@ -640,6 +668,7 @@ def test_value_regex_filter_to_pb_w_bytes():
     expected_pb = _RowFilterPB(value_regex_filter=regex)
     assert pb_val == expected_pb
 
+
 def test_value_regex_filter_to_dict_w_bytes():
     from google.cloud.bigtable.row_filters import ValueRegexFilter
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
@@ -651,6 +680,7 @@ def test_value_regex_filter_to_dict_w_bytes():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_value_regex_filter_to_pb_w_str():
     from google.cloud.bigtable.row_filters import ValueRegexFilter
 
@@ -660,6 +690,7 @@ def test_value_regex_filter_to_pb_w_str():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(value_regex_filter=regex)
     assert pb_val == expected_pb
+
 
 def test_value_regex_filter_to_dict_w_str():
     from google.cloud.bigtable.row_filters import ValueRegexFilter
@@ -683,6 +714,7 @@ def test_exact_value_filter_to_pb_w_bytes():
     expected_pb = _RowFilterPB(value_regex_filter=regex)
     assert pb_val == expected_pb
 
+
 def test_exact_value_filter_to_dict_w_bytes():
     from google.cloud.bigtable.row_filters import ExactValueFilter
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
@@ -694,6 +726,7 @@ def test_exact_value_filter_to_dict_w_bytes():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_exact_value_filter_to_pb_w_str():
     from google.cloud.bigtable.row_filters import ExactValueFilter
 
@@ -703,6 +736,7 @@ def test_exact_value_filter_to_pb_w_str():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(value_regex_filter=regex)
     assert pb_val == expected_pb
+
 
 def test_exact_value_filter_to_dict_w_str():
     from google.cloud.bigtable.row_filters import ExactValueFilter
@@ -716,6 +750,7 @@ def test_exact_value_filter_to_dict_w_str():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_exact_value_filter_to_pb_w_int():
     import struct
     from google.cloud.bigtable.row_filters import ExactValueFilter
@@ -726,6 +761,7 @@ def test_exact_value_filter_to_pb_w_int():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(value_regex_filter=regex)
     assert pb_val == expected_pb
+
 
 def test_exact_value_filter_to_dict_w_int():
     import struct
@@ -739,6 +775,7 @@ def test_exact_value_filter_to_dict_w_int():
     assert row_filter.to_dict() == expected_dict
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
+
 
 def test_value_range_filter_constructor_defaults():
     from google.cloud.bigtable.row_filters import ValueRangeFilter
@@ -864,6 +901,7 @@ def test_value_range_filter_to_pb():
     expected_pb = _RowFilterPB(value_range_filter=_ValueRangePB())
     assert row_filter.to_pb() == expected_pb
 
+
 def test_value_range_filter_to_dict():
     from google.cloud.bigtable.row_filters import ValueRangeFilter
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
@@ -874,6 +912,7 @@ def test_value_range_filter_to_dict():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_value_range_filter_to_pb_inclusive_start():
     from google.cloud.bigtable.row_filters import ValueRangeFilter
 
@@ -882,6 +921,7 @@ def test_value_range_filter_to_pb_inclusive_start():
     val_range_pb = _ValueRangePB(start_value_closed=value)
     expected_pb = _RowFilterPB(value_range_filter=val_range_pb)
     assert row_filter.to_pb() == expected_pb
+
 
 def test_value_range_filter_to_pb_exclusive_start():
     from google.cloud.bigtable.row_filters import ValueRangeFilter
@@ -957,6 +997,7 @@ def test_cells_row_offset_filter_to_pb():
     expected_pb = _RowFilterPB(cells_per_row_offset_filter=num_cells)
     assert pb_val == expected_pb
 
+
 def test_cells_row_offset_filter_to_dict():
     from google.cloud.bigtable.row_filters import CellsRowOffsetFilter
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
@@ -968,6 +1009,7 @@ def test_cells_row_offset_filter_to_dict():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_cells_row_limit_filter_to_pb():
     from google.cloud.bigtable.row_filters import CellsRowLimitFilter
 
@@ -976,6 +1018,7 @@ def test_cells_row_limit_filter_to_pb():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(cells_per_row_limit_filter=num_cells)
     assert pb_val == expected_pb
+
 
 def test_cells_row_limit_filter_to_dict():
     from google.cloud.bigtable.row_filters import CellsRowLimitFilter
@@ -988,6 +1031,7 @@ def test_cells_row_limit_filter_to_dict():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_cells_column_limit_filter_to_pb():
     from google.cloud.bigtable.row_filters import CellsColumnLimitFilter
 
@@ -996,6 +1040,7 @@ def test_cells_column_limit_filter_to_pb():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(cells_per_column_limit_filter=num_cells)
     assert pb_val == expected_pb
+
 
 def test_cells_column_limit_filter_to_dict():
     from google.cloud.bigtable.row_filters import CellsColumnLimitFilter
@@ -1008,6 +1053,7 @@ def test_cells_column_limit_filter_to_dict():
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_strip_value_transformer_filter_to_pb():
     from google.cloud.bigtable.row_filters import StripValueTransformerFilter
 
@@ -1016,6 +1062,7 @@ def test_strip_value_transformer_filter_to_pb():
     pb_val = row_filter.to_pb()
     expected_pb = _RowFilterPB(strip_value_transformer=flag)
     assert pb_val == expected_pb
+
 
 def test_strip_value_transformer_filter_to_dict():
     from google.cloud.bigtable.row_filters import StripValueTransformerFilter
@@ -1027,6 +1074,7 @@ def test_strip_value_transformer_filter_to_dict():
     assert row_filter.to_dict() == expected_dict
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
+
 
 def test_apply_label_filter_constructor():
     from google.cloud.bigtable.row_filters import ApplyLabelFilter
@@ -1073,6 +1121,7 @@ def test_apply_label_filter_to_pb():
     expected_pb = _RowFilterPB(apply_label_transformer=label)
     assert pb_val == expected_pb
 
+
 def test_apply_label_filter_to_dict():
     from google.cloud.bigtable.row_filters import ApplyLabelFilter
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
@@ -1083,6 +1132,7 @@ def test_apply_label_filter_to_dict():
     assert row_filter.to_dict() == expected_dict
     expected_pb_value = row_filter.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
+
 
 def test_filter_combination_constructor_defaults():
     from google.cloud.bigtable.row_filters import _FilterCombination
@@ -1146,6 +1196,7 @@ def test_row_filter_chain_to_pb():
     )
     assert filter_pb == expected_pb
 
+
 def test_row_filter_chain_to_dict():
     from google.cloud.bigtable.row_filters import RowFilterChain
     from google.cloud.bigtable.row_filters import RowSampleFilter
@@ -1161,12 +1212,11 @@ def test_row_filter_chain_to_dict():
     row_filter3 = RowFilterChain(filters=[row_filter1, row_filter2])
     filter_dict = row_filter3.to_dict()
 
-    expected_dict = {
-        "chain": {"filters": [row_filter1_dict, row_filter2_dict]}
-    }
+    expected_dict = {"chain": {"filters": [row_filter1_dict, row_filter2_dict]}}
     assert filter_dict == expected_dict
     expected_pb_value = row_filter3.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
+
 
 def test_row_filter_chain_to_pb_nested():
     from google.cloud.bigtable.row_filters import CellsRowLimitFilter
@@ -1191,6 +1241,7 @@ def test_row_filter_chain_to_pb_nested():
     )
     assert filter_pb == expected_pb
 
+
 def test_row_filter_chain_to_dict_nested():
     from google.cloud.bigtable.row_filters import CellsRowLimitFilter
     from google.cloud.bigtable.row_filters import RowFilterChain
@@ -1213,9 +1264,7 @@ def test_row_filter_chain_to_dict_nested():
     row_filter5 = RowFilterChain(filters=[row_filter3, row_filter4])
     filter_dict = row_filter5.to_dict()
 
-    expected_dict = {
-        "chain": {"filters": [row_filter3_dict, row_filter4_dict]}
-    }
+    expected_dict = {"chain": {"filters": [row_filter3_dict, row_filter4_dict]}}
     assert filter_dict == expected_dict
     expected_pb_value = row_filter5.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
@@ -1240,6 +1289,7 @@ def test_row_filter_union_to_pb():
     )
     assert filter_pb == expected_pb
 
+
 def test_row_filter_union_to_dict():
     from google.cloud.bigtable.row_filters import RowFilterUnion
     from google.cloud.bigtable.row_filters import RowSampleFilter
@@ -1255,12 +1305,11 @@ def test_row_filter_union_to_dict():
     row_filter3 = RowFilterUnion(filters=[row_filter1, row_filter2])
     filter_dict = row_filter3.to_dict()
 
-    expected_dict = {
-        "interleave": {"filters": [row_filter1_dict, row_filter2_dict]}
-    }
+    expected_dict = {"interleave": {"filters": [row_filter1_dict, row_filter2_dict]}}
     assert filter_dict == expected_dict
     expected_pb_value = row_filter3.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
+
 
 def test_row_filter_union_to_pb_nested():
     from google.cloud.bigtable.row_filters import CellsRowLimitFilter
@@ -1285,6 +1334,7 @@ def test_row_filter_union_to_pb_nested():
     )
     assert filter_pb == expected_pb
 
+
 def test_row_filter_union_to_dict_nested():
     from google.cloud.bigtable.row_filters import CellsRowLimitFilter
     from google.cloud.bigtable.row_filters import RowFilterUnion
@@ -1307,12 +1357,11 @@ def test_row_filter_union_to_dict_nested():
     row_filter5 = RowFilterUnion(filters=[row_filter3, row_filter4])
     filter_dict = row_filter5.to_dict()
 
-    expected_dict = {
-        "interleave": {"filters": [row_filter3_dict, row_filter4_dict]}
-    }
+    expected_dict = {"interleave": {"filters": [row_filter3_dict, row_filter4_dict]}}
     assert filter_dict == expected_dict
     expected_pb_value = row_filter5.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
+
 
 def test_conditional_row_filter_constructor():
     from google.cloud.bigtable.row_filters import ConditionalRowFilter
@@ -1401,6 +1450,7 @@ def test_conditional_row_filter_to_pb():
     )
     assert filter_pb == expected_pb
 
+
 def test_conditional_row_filter_to_dict():
     from google.cloud.bigtable.row_filters import ConditionalRowFilter
     from google.cloud.bigtable.row_filters import CellsRowOffsetFilter
@@ -1433,6 +1483,7 @@ def test_conditional_row_filter_to_dict():
     expected_pb_value = row_filter4.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_conditional_row_filter_to_pb_true_only():
     from google.cloud.bigtable.row_filters import ConditionalRowFilter
     from google.cloud.bigtable.row_filters import RowSampleFilter
@@ -1453,6 +1504,7 @@ def test_conditional_row_filter_to_pb_true_only():
         )
     )
     assert filter_pb == expected_pb
+
 
 def test_conditional_row_filter_to_dict_true_only():
     from google.cloud.bigtable.row_filters import ConditionalRowFilter
@@ -1479,6 +1531,7 @@ def test_conditional_row_filter_to_dict_true_only():
     expected_pb_value = row_filter3.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
 
+
 def test_conditional_row_filter_to_pb_false_only():
     from google.cloud.bigtable.row_filters import ConditionalRowFilter
     from google.cloud.bigtable.row_filters import RowSampleFilter
@@ -1499,6 +1552,7 @@ def test_conditional_row_filter_to_pb_false_only():
         )
     )
     assert filter_pb == expected_pb
+
 
 def test_conditional_row_filter_to_dict_false_only():
     from google.cloud.bigtable.row_filters import ConditionalRowFilter
@@ -1524,6 +1578,7 @@ def test_conditional_row_filter_to_dict_false_only():
     assert filter_dict == expected_dict
     expected_pb_value = row_filter3.to_pb()
     assert data_v2_pb2.RowFilter(**expected_dict) == expected_pb_value
+
 
 def _ColumnRangePB(*args, **kw):
     from google.cloud.bigtable_v2.types import data as data_v2_pb2

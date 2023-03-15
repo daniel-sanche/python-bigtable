@@ -278,9 +278,9 @@ class TimestampRange(object):
         timestamp_range_kwargs = {}
         if self.start is not None:
             start_time = _microseconds_from_datetime(self.start) // 1000 * 1000
-            timestamp_range_kwargs["start_timestamp_micros"] =  start_time
+            timestamp_range_kwargs["start_timestamp_micros"] = start_time
         if self.end is not None:
-            end_time =  _microseconds_from_datetime(self.end)
+            end_time = _microseconds_from_datetime(self.end)
             if end_time % 1000 != 0:
                 # if not a whole milisecond value, round up
                 end_time = end_time // 1000 * 1000 + 1000
@@ -376,9 +376,7 @@ class ColumnRangeFilter(RowFilter):
         if inclusive_end is None:
             inclusive_end = True
         elif end_column is None:
-            raise ValueError(
-                "inclusive_end was specified but no end_column was given."
-            )
+            raise ValueError("inclusive_end was specified but no end_column was given.")
 
         self.column_family_id = column_family_id
 
@@ -529,9 +527,7 @@ class ValueRangeFilter(RowFilter):
         if inclusive_end is None:
             inclusive_end = True
         elif end_value is None:
-            raise ValueError(
-                "inclusive_end was specified but no end_column was given."
-            )
+            raise ValueError("inclusive_end was specified but no end_column was given.")
         if isinstance(start_value, int):
             start_value = _PACK_I64(start_value)
         self.start_value = start_value

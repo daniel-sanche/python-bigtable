@@ -19,15 +19,16 @@ import unittest
 import time
 
 TEST_ROWS = [
-  "row_key_1",
-  b"row_key_2",
+    "row_key_1",
+    b"row_key_2",
 ]
 
-class TestReadRowsQuery(unittest.TestCase):
 
+class TestReadRowsQuery(unittest.TestCase):
     @staticmethod
     def _get_target_class():
         from google.cloud.bigtable.read_rows_query import ReadRowsQuery
+
         return ReadRowsQuery
 
     def _make_one(self, *args, **kwargs):
@@ -42,6 +43,7 @@ class TestReadRowsQuery(unittest.TestCase):
 
     def test_ctor_explicit(self):
         from google.cloud.bigtable.row_filters import RowFilterChain
+
         filter_ = RowFilterChain()
         query = self._make_one(["row_key_1", "row_key_2"], limit=10, row_filter=filter_)
         self.assertEqual(len(query.row_keys), 2)
@@ -57,6 +59,7 @@ class TestReadRowsQuery(unittest.TestCase):
 
     def test_set_filter(self):
         from google.cloud.bigtable.row_filters import RowFilterChain
+
         filter1 = RowFilterChain()
         query = self._make_one()
         self.assertEqual(query.filter, None)
@@ -73,10 +76,11 @@ class TestReadRowsQuery(unittest.TestCase):
         self.assertEqual(query.filter, RowFilterChain())
         with self.assertRaises(ValueError):
             query.filter = 1
-    
+
     def test_set_filter_dict(self):
         from google.cloud.bigtable.row_filters import RowSampleFilter
         from google.cloud.bigtable_v2.types.bigtable import ReadRowsRequest
+
         filter1 = RowSampleFilter(0.5)
         filter1_dict = filter1.to_dict()
         query = self._make_one()
@@ -91,7 +95,6 @@ class TestReadRowsQuery(unittest.TestCase):
 
         query.filter = None
         self.assertEqual(query.filter, None)
-
 
     def test_set_limit(self):
         query = self._make_one()
@@ -222,15 +225,15 @@ class TestReadRowsQuery(unittest.TestCase):
         with self.assertRaises(ValueError):
             query.add_range(end_is_inclusive=True)
 
-
     def test_to_dict_rows_default(self):
         # dictionary should be in rowset proto format
         from google.cloud.bigtable_v2.types.bigtable import ReadRowsRequest
+
         query = self._make_one()
         output = query.to_dict()
         self.assertTrue(isinstance(output, dict))
         self.assertEqual(len(output.keys()), 1)
-        expected = {'rows': {'row_keys': [], 'row_ranges': []}}
+        expected = {"rows": {"row_keys": [], "row_ranges": []}}
         self.assertEqual(output, expected)
 
         request_proto = ReadRowsRequest(**output)
@@ -239,11 +242,11 @@ class TestReadRowsQuery(unittest.TestCase):
         self.assertFalse(request_proto.filter)
         self.assertEqual(request_proto.rows_limit, 0)
 
-
     def test_to_dict_rows_populated(self):
         # dictionary should be in rowset proto format
         from google.cloud.bigtable_v2.types.bigtable import ReadRowsRequest
         from google.cloud.bigtable.row_filters import PassAllFilter
+
         row_filter = PassAllFilter(False)
         query = self._make_one(limit=100, row_filter=row_filter)
         query.add_range("test_row", "test_row2")
@@ -281,12 +284,5 @@ class TestReadRowsQuery(unittest.TestCase):
         filter_proto = request_proto.filter
         self.assertEqual(filter_proto, row_filter.to_pb())
 
-
-
-
-
-
-
     def test_shard(self):
         pass
-    
