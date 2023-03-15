@@ -49,6 +49,13 @@ class TestRowResponse(unittest.TestCase):
         self.assertEqual(list(row_response), cells)
         self.assertEqual(row_response.row_key, TEST_ROW_KEY)
 
+
+    def test_ctor_bad_cell(self):
+        cells = [self._make_cell(), self._make_cell()]
+        cells[1].row_key = b'other'
+        with self.assertRaises(ValueError):
+            self._make_one(TEST_ROW_KEY, cells)
+
     def test_cell_order(self):
         # cells should be ordered on init
         cell1 = self._make_cell(value=b'1')

@@ -51,6 +51,8 @@ class RowResponse(
         self._cells_list: list[CellResponse] = []
         # add cells to internal stores using Bigtable native ordering
         for cell in sorted(cells):
+            if cell.row_key != self.row_key:
+                raise ValueError(f"CellResponse row_key ({cell.row_key}) does not match RowResponse key ({self.row_key})")
             if cell.family not in self._cells_map:
                 self._cells_map[cell.family] = OrderedDict()
             if cell.column_qualifier not in self._cells_map[cell.family]:
