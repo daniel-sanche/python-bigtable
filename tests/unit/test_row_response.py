@@ -44,11 +44,27 @@ class TestRowResponse(unittest.TestCase):
         return CellResponse(value, row_key, family_id, qualifier, timestamp, labels)
 
     def test_ctor(self):
+        cells = {(TEST_FAMILY_ID, TEST_QUALIFIER): [self._make_cell().to_dict(), self._make_cell().to_dict(use_nanoseconds=True)]}
+        row_response = self._make_one(TEST_ROW_KEY, cells)
+        self.assertEqual(row_response.row_key, TEST_ROW_KEY)
+        self.assertEqual(len(row_response), 2)
+        for i in range(2):
+            self.assertEqual(row_response[i].value, TEST_VALUE)
+            self.assertEqual(row_response[i].row_key, TEST_ROW_KEY)
+            self.assertEqual(row_response[i].family, TEST_FAMILY_ID)
+            self.assertEqual(row_response[i].column_qualifier, TEST_QUALIFIER)
+            self.assertEqual(row_response[i].labels, TEST_LABELS)
+        self.assertEqual(row_response[0].timestamp_ns, TEST_TIMESTAMP)
+        # second cell was initialized with use_nanoseconds=False, so it doesn't have full precision
+        self.assertEqual(row_response[1].timestamp_ns, TEST_TIMESTAMP//1000 * 1000)
+
+
+
+    def test_ctor_dict(self):
         cells = [self._make_cell(), self._make_cell()]
         row_response = self._make_one(TEST_ROW_KEY, cells)
         self.assertEqual(list(row_response), cells)
         self.assertEqual(row_response.row_key, TEST_ROW_KEY)
-
 
     def test_ctor_bad_cell(self):
         cells = [self._make_cell(), self._make_cell()]
