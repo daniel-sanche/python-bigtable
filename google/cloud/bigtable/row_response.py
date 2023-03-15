@@ -99,6 +99,10 @@ class RowResponse(
         if isinstance(qualifier, str):
             qualifier = qualifier.encode("utf-8")
         # return cells in family and qualifier on get_cells(family, qualifier)
+        if family not in self._cells_map:
+            raise ValueError(f"Family '{family}' not found in row '{self.row_key}'")
+        if qualifier not in self._cells_map[family]:
+            raise ValueError(f"Qualifier '{qualifier}' not found in family '{family}' in row '{self.row_key}'")
         return self._cells_map[family][qualifier]
 
     def _get_all_from_family(
@@ -107,6 +111,8 @@ class RowResponse(
         """
         Returns all cells in the row
         """
+        if family not in self._cells_map:
+            raise ValueError(f"Family '{family}' not found in row '{self.row_key}'")
         qualifier_dict = self._cells_map.get(family, {})
         for cell_batch in qualifier_dict.values():
             for cell in cell_batch:
@@ -176,7 +182,8 @@ class RowResponse(
             and isinstance(item[1], (qualifier, str))
         ):
             # check if (family, qualifier) pair is in RowResponse
-            return item[0] in self._cells_map and item[1] in self._cells_map[item[0]]
+            qualifer = item[1] if isinstance(item[1], bytes) else item[1].encode()
+            return item[0] in self._cells_map and qualifer in self._cells_map[item[0]]
         # check if CellResponse is in RowResponse
         return item in self._cells_list
 
@@ -207,9 +214,11 @@ class RowResponse(
             and isinstance(index[1], (qualifier, str))
         ):
             return self.get_cells(family=index[0], qualifier=index[1])
-        else:
+        elif isinstance(index, int) or isinstance(index, slice):
             # index is int or slice
             return self._cells_list[index]
+        else:
+            raise TypeError("Index must be family_id, (family_id, qualifier), int, or slice")
 
     def __len__(self):
         return len(self._cells_list)
@@ -220,6 +229,9 @@ class RowResponse(
             for qualifier in self._cells_map[family]:
                 key_list.append((family, qualifier))
         return key_list
+
+    def values(self):
+        return self._cells_list
 
     def items(self):
         for key in self.keys():
@@ -269,6 +281,8 @@ class CellResponse:
         self.value = value
         self.row_key = row
         self.family = family
+        if isinstance(column_qualifier, str):
+            column_qualifier = column_qualifier.encode()
         self.column_qualifier = column_qualifier
         self.timestamp_ns = timestamp_ns
         self.labels = labels if labels is not None else []

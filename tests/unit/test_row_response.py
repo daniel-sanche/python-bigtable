@@ -104,6 +104,13 @@ class TestRowResponse(unittest.TestCase):
         # calling with just qualifier should raise an error
         with self.assertRaises(ValueError):
             row_response.get_cells(qualifier=b"a")
+        # test calling with bad family or qualifier
+        with self.assertRaises(ValueError):
+            row_response.get_cells(family="3", qualifier=b"a")
+        with self.assertRaises(ValueError):
+            response = row_response.get_cells(family="3")
+        with self.assertRaises(ValueError):
+            row_response.get_cells(family="1", qualifier=b"c")
 
     def test__repr__(self):
         from google.cloud.bigtable.row_response import CellResponse
@@ -180,51 +187,220 @@ class TestRowResponse(unittest.TestCase):
         self.assertEqual(column.cells[1].labels, TEST_LABELS)
 
     def test_iteration(self):
+        from types import GeneratorType
+        from google.cloud.bigtable.row_response import CellResponse
         # should be able to iterate over the RowResponse as a list
-        pass
+        cell3 = self._make_cell(value=b'3')
+        cell1 = self._make_cell(value=b'1')
+        cell2 = self._make_cell(value=b'2')
+        row_response = self._make_one(TEST_ROW_KEY, [cell3, cell1, cell2])
+        self.assertEqual(len(row_response), 3)
+        # should create generator object
+        self.assertIsInstance(iter(row_response), GeneratorType)
+        result_list = list(row_response)
+        self.assertEqual(len(result_list), 3)
+        # should be able to iterate over all cells
+        idx = 0
+        for cell in row_response:
+            self.assertIsInstance(cell, CellResponse)
+            self.assertEqual(cell.value, result_list[idx].value)
+            self.assertEqual(cell.value, str(idx+1).encode())
+            idx+=1
+
 
     def test_contains_cell(self):
-        pass
+        cell3 = self._make_cell(value=b'3')
+        cell1 = self._make_cell(value=b'1')
+        cell2 = self._make_cell(value=b'2')
+        cell4 = self._make_cell(value=b'4')
+        row_response = self._make_one(TEST_ROW_KEY, [cell3, cell1, cell2])
+        self.assertIn(cell1, row_response)
+        self.assertIn(cell2, row_response)
+        self.assertNotIn(cell4, row_response)
+        cell3_copy = self._make_cell(value=b'3')
+        self.assertIn(cell3_copy, row_response)
 
     def test_contains_family_id(self):
-        pass
+        new_family_id = 'new_family_id'
+        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        row_response = self._make_one(TEST_ROW_KEY, [cell, cell2])
+        self.assertIn(TEST_FAMILY_ID, row_response)
+        self.assertIn("new_family_id", row_response)
+        self.assertIn(new_family_id, row_response)
+        self.assertNotIn('not_a_family_id', row_response)
+        self.assertNotIn(None, row_response)
 
     def test_contains_family_qualifier_tuple(self):
-        pass
+        new_family_id = 'new_family_id'
+        new_qualifier = b'new_qualifier'
+        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, new_qualifier, TEST_TIMESTAMP, TEST_LABELS)
+        row_response = self._make_one(TEST_ROW_KEY, [cell, cell2])
+        self.assertIn((TEST_FAMILY_ID, TEST_QUALIFIER), row_response)
+        self.assertIn(("new_family_id", "new_qualifier"), row_response)
+        self.assertIn(("new_family_id", b"new_qualifier"), row_response)
+        self.assertIn((new_family_id, new_qualifier), row_response)
 
-    def test___len__(self):
-        pass
+        self.assertNotIn(('not_a_family_id', TEST_QUALIFIER), row_response)
+        self.assertNotIn((TEST_FAMILY_ID, 'not_a_qualifier'), row_response)
+        self.assertNotIn((TEST_FAMILY_ID, new_qualifier), row_response)
+        self.assertNotIn(('not_a_family_id', 'not_a_qualifier'), row_response)
+        self.assertNotIn((None, None), row_response)
+        self.assertNotIn(None, row_response)
+
 
     def test_int_indexing(self):
         # should be able to index into underlying list with an index number directly
-        pass
+        cell_list = [self._make_cell(value=str(i).encode()) for i in range(10)]
+        sorted(cell_list)
+        row_response = self._make_one(TEST_ROW_KEY, cell_list)
+        self.assertEqual(len(row_response), 10)
+        for i in range(10):
+            self.assertEqual(row_response[i].value, str(i).encode())
+            # backwards indexing should work
+            self.assertEqual(row_response[-i-1].value, str(9-i).encode())
+        with self.assertRaises(IndexError):
+            row_response[10]
+        with self.assertRaises(IndexError):
+            row_response[-11]
+
 
     def test_slice_indexing(self):
         # should be able to index with a range of indices
-        pass
+        cell_list = [self._make_cell(value=str(i).encode()) for i in range(10)]
+        sorted(cell_list)
+        row_response = self._make_one(TEST_ROW_KEY, cell_list)
+        self.assertEqual(len(row_response), 10)
+        self.assertEqual(len(row_response[0:10]), 10)
+        self.assertEqual(row_response[0:10], cell_list)
+        self.assertEqual(len(row_response[0:]), 10)
+        self.assertEqual(row_response[0:], cell_list)
+        self.assertEqual(len(row_response[:10]), 10)
+        self.assertEqual(row_response[:10], cell_list)
+        self.assertEqual(len(row_response[0:10:1]), 10)
+        self.assertEqual(row_response[0:10:1], cell_list)
+        self.assertEqual(len(row_response[0:10:2]), 5)
+        self.assertEqual(row_response[0:10:2], [cell_list[i] for i in range(0, 10, 2)])
+        self.assertEqual(len(row_response[0:10:3]), 4)
+        self.assertEqual(row_response[0:10:3], [cell_list[i] for i in range(0, 10, 3)])
+        self.assertEqual(len(row_response[10:0:-1]), 9)
+        self.assertEqual(len(row_response[10:0:-2]), 5)
+        self.assertEqual(row_response[10:0:-3], cell_list[10:0:-3])
+        self.assertEqual(len(row_response[0:100]), 10)
 
     def test_family_indexing(self):
         # should be able to retrieve cells in a family
-        pass
+        new_family_id = 'new_family_id'
+        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        cell3 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        row_response = self._make_one(TEST_ROW_KEY, [cell, cell2, cell3])
+
+        self.assertEqual(len(row_response[TEST_FAMILY_ID]), 2)
+        self.assertEqual(row_response[TEST_FAMILY_ID][0], cell)
+        self.assertEqual(row_response[TEST_FAMILY_ID][1], cell2)
+        self.assertEqual(len(row_response[new_family_id]), 1)
+        self.assertEqual(row_response[new_family_id][0], cell3)
+        with self.assertRaises(ValueError):
+            row_response['not_a_family_id']
+        with self.assertRaises(TypeError):
+            row_response[None]
+        with self.assertRaises(TypeError):
+            row_response[b'new_family_id']
 
     def test_family_qualifier_indexing(self):
         # should be able to retrieve cells in a family/qualifier tuplw
-        pass
+        new_family_id = 'new_family_id'
+        new_qualifier = b'new_qualifier'
+        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        cell3 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, new_qualifier, TEST_TIMESTAMP, TEST_LABELS)
+        row_response = self._make_one(TEST_ROW_KEY, [cell, cell2, cell3])
+
+        self.assertEqual(len(row_response[TEST_FAMILY_ID, TEST_QUALIFIER]), 2)
+        self.assertEqual(row_response[TEST_FAMILY_ID, TEST_QUALIFIER][0], cell)
+        self.assertEqual(row_response[TEST_FAMILY_ID, TEST_QUALIFIER][1], cell2)
+        self.assertEqual(len(row_response[new_family_id, new_qualifier]), 1)
+        self.assertEqual(row_response[new_family_id, new_qualifier][0], cell3)
+        self.assertEqual(len(row_response['new_family_id', 'new_qualifier']), 1)
+        self.assertEqual(len(row_response['new_family_id', b'new_qualifier']), 1)
+        with self.assertRaises(ValueError):
+            row_response[new_family_id, 'not_a_qualifier']
+        with self.assertRaises(ValueError):
+            row_response['not_a_family_id', new_qualifier]
+        with self.assertRaises(TypeError):
+            row_response[None, None]
+        with self.assertRaises(TypeError):
+            row_response[b'new_family_id', b'new_qualifier']
+
 
     def test_keys(self):
         # should be able to retrieve (family,qualifier) tuples as keys
-        pass
+        new_family_id = 'new_family_id'
+        new_qualifier = b'new_qualifier'
+        cell = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        cell2 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        cell3 = self._make_cell(TEST_VALUE, TEST_ROW_KEY, new_family_id, new_qualifier, TEST_TIMESTAMP, TEST_LABELS)
+        row_response = self._make_one(TEST_ROW_KEY, [cell, cell2, cell3])
+
+        self.assertEqual(len(row_response.keys()), 2)
+        self.assertEqual(row_response.keys(), [(TEST_FAMILY_ID, TEST_QUALIFIER), (new_family_id, new_qualifier)])
+
+        row_response = self._make_one(TEST_ROW_KEY, [])
+        self.assertEqual(len(row_response.keys()), 0)
+        self.assertEqual(row_response.keys(), [])
+
+        row_response = self._make_one(TEST_ROW_KEY, [cell])
+        self.assertEqual(len(row_response.keys()), 1)
+        self.assertEqual(row_response.keys(), [(TEST_FAMILY_ID, TEST_QUALIFIER)])
 
     def test_values(self):
         # values should return the list of all cells
-        pass
+        cell_list = [self._make_cell( qualifier=str(i).encode()) for i in range(10)]
+        row_response = self._make_one(TEST_ROW_KEY, cell_list)
+        sorted(cell_list)
+
+        self.assertEqual(len(row_response.values()), 10)
+        self.assertEqual(row_response.values(), cell_list)
+
+    def test_items(self):
+        cell_list = [self._make_cell() for i in range(10)]
+        sorted(cell_list)
+        row_response = self._make_one(TEST_ROW_KEY, cell_list)
+
+        self.assertEqual(len(list(row_response.items())), 1)
+        self.assertEqual(list(row_response.items())[0][0], (TEST_FAMILY_ID, TEST_QUALIFIER))
+        self.assertEqual(list(row_response.items())[0][1], cell_list)
+
+        row_response = self._make_one(TEST_ROW_KEY, [])
+        self.assertEqual(len(list(row_response.items())), 0)
+
+        cell_list = [self._make_cell(qualifier=str(i).encode()) for i in range(10)]
+        row_response = self._make_one(TEST_ROW_KEY, cell_list)
+        sorted(cell_list)
+        self.assertEqual(len(list(row_response.items())), 10)
+        keys = [t[0] for t in row_response.items()]
+        cells = [t[1] for t in row_response.items()]
+        for i in range(10):
+            self.assertEqual(keys[i], (TEST_FAMILY_ID, str(i).encode()))
+            self.assertEqual(len(cells[i]), 1)
+            self.assertEqual(cells[i][0], cell_list[i])
+
 
     def test_index_of(self):
         # given a cell, should find index in underlying list
-        pass
+        cell_list = [self._make_cell(value=str(i).encode()) for i in range(10)]
+        sorted(cell_list)
+        row_response = self._make_one(TEST_ROW_KEY, cell_list)
 
-    def test_count(self):
-        pass
+        self.assertEqual(row_response.index(cell_list[0]), 0)
+        self.assertEqual(row_response.index(cell_list[5]), 5)
+        self.assertEqual(row_response.index(cell_list[9]), 9)
+        with self.assertRaises(ValueError):
+            row_response.index(self._make_cell())
+        with self.assertRaises(ValueError):
+            row_response.index(None)
 
 
 class TestCellResponse(unittest.TestCase):
