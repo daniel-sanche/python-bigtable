@@ -66,10 +66,25 @@ class TestReadRowsQuery(unittest.TestCase):
         filter2 = RowFilterChain()
         result = query.set_filter(filter2)
         self.assertEqual(query.filter, filter2)
-        self.assertEqual(query.filter, filter2)
         result = query.set_filter(None)
         self.assertEqual(query.filter, None)
         self.assertEqual(result, query)
+    
+    def test_set_filter_dict(self):
+        from google.cloud.bigtable.row_filters import RowSampleFilter
+        from google.cloud.bigtable_v2.types.bigtable import ReadRowsRequest
+        filter1 = RowSampleFilter(0.5)
+        filter1_dict = filter1.to_dict()
+        query = self._make_one()
+        self.assertEqual(query.filter, None)
+        result = query.set_filter(filter1_dict)
+        self.assertEqual(query.filter, filter1_dict)
+        self.assertEqual(result, query)
+        output = query.to_dict()
+        self.assertEqual(output["filter"], filter1_dict)
+        proto_output = ReadRowsRequest(**output)
+        self.assertEqual(proto_output.filter, filter1.to_pb())
+
 
     def test_set_limit(self):
         query = self._make_one()
@@ -152,10 +167,106 @@ class TestReadRowsQuery(unittest.TestCase):
         self.assertEqual(len(query.row_keys), 3)
 
     def test_add_range(self):
-        pass
+        # test with start and end keys
+        query = self._make_one()
+        self.assertEqual(query.row_ranges, [])
+        result = query.add_range("test_row", "test_row2")
+        self.assertEqual(len(query.row_ranges), 1)
+        self.assertEqual(query.row_ranges[0][0].key, "test_row".encode())
+        self.assertEqual(query.row_ranges[0][1].key, "test_row2".encode())
+        self.assertEqual(query.row_ranges[0][0].is_inclusive, True)
+        self.assertEqual(query.row_ranges[0][1].is_inclusive, False)
+        self.assertEqual(result, query)
+        # test with start key only
+        result = query.add_range("test_row3")
+        self.assertEqual(len(query.row_ranges), 2)
+        self.assertEqual(query.row_ranges[1][0].key, "test_row3".encode())
+        self.assertEqual(query.row_ranges[1][1], None)
+        self.assertEqual(result, query)
+        # test with end key only
+        result = query.add_range(start_key=None, end_key="test_row5")
+        self.assertEqual(len(query.row_ranges), 3)
+        self.assertEqual(query.row_ranges[2][0], None)
+        self.assertEqual(query.row_ranges[2][1].key, "test_row5".encode())
+        self.assertEqual(query.row_ranges[2][1].is_inclusive, False)
+        # test with start and end keys and inclusive flags
+        result = query.add_range(b"test_row6", b"test_row7", False, True)
+        self.assertEqual(len(query.row_ranges), 4)
+        self.assertEqual(query.row_ranges[3][0].key, b"test_row6")
+        self.assertEqual(query.row_ranges[3][1].key, b"test_row7")
+        self.assertEqual(query.row_ranges[3][0].is_inclusive, False)
+        self.assertEqual(query.row_ranges[3][1].is_inclusive, True)
 
-    def test_to_dict(self):
-        pass
+        # test with nothing passed
+        result = query.add_range()
+        self.assertEqual(len(query.row_ranges), 5)
+        self.assertEqual(query.row_ranges[4][0], None)
+        self.assertEqual(query.row_ranges[4][1], None)
+
+
+    def test_to_dict_rows_default(self):
+        # dictionary should be in rowset proto format
+        from google.cloud.bigtable_v2.types.bigtable import ReadRowsRequest
+        query = self._make_one()
+        output = query.to_dict()
+        self.assertTrue(isinstance(output, dict))
+        self.assertEqual(len(output.keys()), 1)
+        expected = {'rows': {'row_keys': [], 'row_ranges': []}}
+        self.assertEqual(output, expected)
+
+        request_proto = ReadRowsRequest(**output)
+        self.assertEqual(request_proto.rows.row_keys, [])
+        self.assertEqual(request_proto.rows.row_ranges, [])
+        self.assertFalse(request_proto.filter)
+        self.assertEqual(request_proto.rows_limit, 0)
+
+
+    def test_to_dict_rows_populated(self):
+        # dictionary should be in rowset proto format
+        from google.cloud.bigtable_v2.types.bigtable import ReadRowsRequest
+        from google.cloud.bigtable.row_filters import PassAllFilter
+        row_filter = PassAllFilter(False)
+        query = self._make_one(limit=100, row_filter=row_filter)
+        query.add_range("test_row", "test_row2")
+        query.add_range("test_row3")
+        query.add_range(start_key=None, end_key="test_row5")
+        query.add_range(b"test_row6", b"test_row7", False, True)
+        query.add_range()
+        query.add_rows(["test_row", b"test_row2", "test_row3"])
+        query.add_rows(["test_row3", b"test_row4"])
+        output = query.to_dict()
+        self.assertTrue(isinstance(output, dict))
+        request_proto = ReadRowsRequest(**output)
+        rowset_proto = request_proto.rows
+        # check rows
+        self.assertEqual(len(rowset_proto.row_keys), 4)
+        self.assertEqual(rowset_proto.row_keys[0], b"test_row")
+        self.assertEqual(rowset_proto.row_keys[1], b"test_row2")
+        self.assertEqual(rowset_proto.row_keys[2], b"test_row3")
+        self.assertEqual(rowset_proto.row_keys[3], b"test_row4")
+        # check ranges
+        self.assertEqual(len(rowset_proto.row_ranges), 5)
+        self.assertEqual(rowset_proto.row_ranges[0].start_key_closed, b"test_row")
+        self.assertEqual(rowset_proto.row_ranges[0].end_key_open, b"test_row2")
+        self.assertEqual(rowset_proto.row_ranges[1].start_key_closed, b"test_row3")
+        self.assertEqual(rowset_proto.row_ranges[1].end_key_open, b"")
+        self.assertEqual(rowset_proto.row_ranges[2].start_key_closed, b"")
+        self.assertEqual(rowset_proto.row_ranges[2].end_key_open, b"test_row5")
+        self.assertEqual(rowset_proto.row_ranges[3].start_key_open, b"test_row6")
+        self.assertEqual(rowset_proto.row_ranges[3].end_key_closed, b"test_row7")
+        self.assertEqual(rowset_proto.row_ranges[4].start_key_closed, b"")
+        self.assertEqual(rowset_proto.row_ranges[4].end_key_open, b"")
+        # check limit
+        self.assertEqual(request_proto.rows_limit, 100)
+        # check filter
+        filter_proto = request_proto.filter
+        self.assertEqual(filter_proto, row_filter.to_pb())
+
+
+
+
+
+
 
     def test_shard(self):
         pass

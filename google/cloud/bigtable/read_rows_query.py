@@ -16,15 +16,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from .row_response import row_key
 from dataclasses import dataclass
+from google.cloud.bigtable.row_filters import RowFilter
 
 if TYPE_CHECKING:
-    from google.cloud.bigtable.row_filters import RowFilter
     from google.cloud.bigtable import RowKeySamples
 
 
 @dataclass
 class _RangePoint:
-    key: row_key | None
+    # model class for a point in a row range
+    key: row_key
     is_inclusive: bool
 
 
@@ -37,14 +38,14 @@ class ReadRowsQuery:
         self,
         row_keys: list[str | bytes] | str | bytes | None = None,
         limit:int|None=None,
-        row_filter:RowFilter|None=None,
+        row_filter:RowFilter|dict[str,Any]|None=None,
     ):
         self.row_keys: set[bytes] = set()
         self.row_ranges: list[tuple[_RangePoint, _RangePoint]] = []
         if row_keys:
             self.add_rows(row_keys)
-        self.limit = limit
-        self.filter = row_filter
+        self.limit:int|None = limit
+        self.filter:RowFilter|dict[str,Any] = row_filter
 
     def get_limit(self) -> int | None:
         return self._limit
@@ -58,7 +59,9 @@ class ReadRowsQuery:
     def get_filter(self) -> RowFilter:
         return self._filter
 
-    def set_filter(self, row_filter: "RowFilter"|None):
+    def set_filter(self, row_filter: RowFilter|dict|None) -> ReadRowsQuery:
+        if not (isinstance(row_filter, dict) or isinstance(row_filter, RowFilter) or row_filter is None):
+            raise ValueError("row_filter must be a RowFilter or corresponding dict representation")
         self._filter = row_filter
         return self
 
@@ -86,17 +89,19 @@ class ReadRowsQuery:
         start_is_inclusive: bool = True,
         end_is_inclusive: bool = False,
     ) -> ReadRowsQuery:
-        if start_key is None and end_key is None:
-            raise ValueError("start_key and end_key cannot both be None")
         if isinstance(start_key, str):
             start_key = start_key.encode()
+        elif start_key is not None and not isinstance(start_key, bytes):
+            raise ValueError("start_key must be a string or bytes")
         if isinstance(end_key, str):
             end_key = end_key.encode()
+        elif end_key is not None and not isinstance(end_key, bytes):
+            raise ValueError("end_key must be a string or bytes")
 
         self.row_ranges.append(
             (
-                _RangePoint(start_key, start_is_inclusive),
-                _RangePoint(end_key, end_is_inclusive),
+                _RangePoint(start_key, start_is_inclusive) if start_key is not None else None,
+                _RangePoint(end_key, end_is_inclusive) if end_key is not None else None
             )
         )
         return self
@@ -120,17 +125,22 @@ class ReadRowsQuery:
         ranges = []
         for start, end in self.row_ranges:
             new_range = {}
-            if start.key is not None:
+            if start is not None:
                 key = "start_key_closed" if start.is_inclusive else "start_key_open"
                 new_range[key] = start.key
-            if end.key is not None:
+            if end is not None:
                 key = "end_key_closed" if end.is_inclusive else "end_key_open"
                 new_range[key] = end.key
             ranges.append(new_range)
-        row_set = {"row_keys": list(self.row_keys), "row_ranges": ranges}
+        row_keys = list(self.row_keys)
+        row_keys.sort()
+        row_set = {"row_keys": row_keys, "row_ranges": ranges}
         final_dict = {
             "rows": row_set,
-            "filter": self.filter.to_dict(),
-            "limit": self.limit,
         }
+        dict_filter = self.filter.to_dict() if isinstance(self.filter, RowFilter) else self.filter
+        if dict_filter:
+            final_dict["filter"] = dict_filter
+        if self.limit is not None:
+            final_dict["rows_limit"] = self.limit
         return final_dict
