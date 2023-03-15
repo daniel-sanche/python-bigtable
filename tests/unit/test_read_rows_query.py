@@ -196,12 +196,20 @@ class TestReadRowsQuery(unittest.TestCase):
         self.assertEqual(query.row_ranges[3][1].key, b"test_row7")
         self.assertEqual(query.row_ranges[3][0].is_inclusive, False)
         self.assertEqual(query.row_ranges[3][1].is_inclusive, True)
-
         # test with nothing passed
         result = query.add_range()
         self.assertEqual(len(query.row_ranges), 5)
         self.assertEqual(query.row_ranges[4][0], None)
         self.assertEqual(query.row_ranges[4][1], None)
+        # test with inclusive flags only
+        with self.assertRaises(ValueError):
+            query.add_range(start_is_inclusive=True, end_is_inclusive=True)
+        with self.assertRaises(ValueError):
+            query.add_range(start_is_inclusive=False, end_is_inclusive=False)
+        with self.assertRaises(ValueError):
+            query.add_range(start_is_inclusive=False)
+        with self.assertRaises(ValueError):
+            query.add_range(end_is_inclusive=True)
 
 
     def test_to_dict_rows_default(self):

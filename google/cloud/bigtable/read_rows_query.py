@@ -132,18 +132,32 @@ class ReadRowsQuery:
         self,
         start_key: str | bytes | None = None,
         end_key: str | bytes | None = None,
-        start_is_inclusive: bool = True,
-        end_is_inclusive: bool = False,
+        start_is_inclusive: bool | None = None,
+        end_is_inclusive: bool | None = None,
     ) -> ReadRowsQuery:
         """
         Add a range of row keys to this query.
 
         Args:
           - start_key: the start of the range
+              if None, start_key is interpreted as the empty string, inclusive
           - end_key: the end of the range
+              if None, end_key is interpreted as the infinite row key, exclusive
           - start_is_inclusive: if True, the start key is included in the range
+              defaults to True if None. Must not be included if start_key is None
           - end_is_inclusive: if True, the end key is included in the range
+              defaults to False if None. Must not be included if end_key is None
         """
+        # check for invalid combinations of arguments
+        if start_is_inclusive is None:
+            start_is_inclusive = True
+        elif start_key is None:
+            raise ValueError("start_is_inclusive must not be included if start_key is None")
+        if end_is_inclusive is None:
+            end_is_inclusive = False
+        elif end_key is None:
+            raise ValueError("end_is_inclusive must not be included if end_key is None")
+        # ensure that start_key and end_key are bytes
         if isinstance(start_key, str):
             start_key = start_key.encode()
         elif start_key is not None and not isinstance(start_key, bytes):
@@ -153,12 +167,9 @@ class ReadRowsQuery:
         elif end_key is not None and not isinstance(end_key, bytes):
             raise ValueError("end_key must be a string or bytes")
 
-        self.row_ranges.append(
-            (
-                _RangePoint(start_key, start_is_inclusive) if start_key is not None else None,
-                _RangePoint(end_key, end_is_inclusive) if end_key is not None else None
-            )
-        )
+        start_pt = _RangePoint(start_key, start_is_inclusive) if start_key is not None else None
+        end_pt = _RangePoint(end_key, end_is_inclusive) if end_key is not None else None
+        self.row_ranges.append((start_pt, end_pt))
         return self
 
     def shard(self, shard_keys: "RowKeySamples" | None = None) -> list[ReadRowsQuery]:
