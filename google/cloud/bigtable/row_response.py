@@ -42,13 +42,24 @@ class RowResponse(
     cells = row["family", "qualifier"]
     """
 
-    def __init__(self, key: row_key, cells: list[CellResponse]):
+    def __init__(self, key: row_key, cells: list[CellResponse]|dict[tuple[family_id, qualifier], list[CellResponse]]):
         """Expected to be used internally only"""
         self.row_key = key
         self._cells_map: dict[
             family_id, dict[qualifier, list[CellResponse]]
         ] = OrderedDict()
         self._cells_list: list[CellResponse] = []
+        if isinstance(cells, dict):
+            # handle dict input
+            tmp_list = []
+            for (family, qualifier), cell_list in cells.items():
+                for cell in cell_list:
+                    timestamp = cell.get("timestamp_ns", 1000*cell.get("timestamp_micros", -1))
+                    if timestamp < 0:
+                        raise ValueError("invalid timestamp")
+                    cell = CellResponse(cell["value"], key, family, qualifier, timestamp, cell.get("labels",None))
+                    tmp_list.append(cell)
+            cells = tmp_list
         # add cells to internal stores using Bigtable native ordering
         for cell in sorted(cells):
             if cell.row_key != self.row_key:
@@ -120,9 +131,14 @@ class RowResponse(
         return "\n".join(output)
 
     def __repr__(self):
-        cell_reprs = [repr(cell) for cell in self._cells_list]
-        cell_reprs = ", ".join(cell_reprs)
-        return f"RowResponse(key={self.row_key!r}, cells=[{cell_reprs}])"
+        cell_str = ["{"]
+        for key, cell_list in self.items():
+            repr_list = [cell.to_dict(use_nanoseconds=True) for cell in cell_list]
+            cell_str.append(f"  ('{key[0]}', {key[1]}): {repr_list},")
+        cell_str.append("}")
+        cell_str = "\n".join(cell_str)
+        output = f"RowResponse(key={self.row_key!r}, cells={cell_str})"
+        return output
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -203,10 +219,29 @@ class RowResponse(
                 key_list.append((family, qualifier))
         return key_list
 
+    def items(self):
+        for key in self.keys():
+            yield key, self[key]
+
     def __eq__(self, other):
+        # for performance reasons, check row metadata
+        # before checking individual cells
         if not isinstance(other, RowResponse):
             return False
-        return self.row_key == other.row_key and self._cells_list == other._cells_list
+        if self.row_key != other.row_key:
+            return False
+        if len(self._cells_list) != len(other._cells_list):
+            return False
+        keys, other_keys = self.keys(), other.keys()
+        if keys != other_keys:
+            return False
+        for key in keys:
+            if len(self[key]) != len(other[key]):
+                return False
+        # compare individual cell lists
+        if self._cells_list != other._cells_list:
+            return False
+        return True
 
 
 @total_ordering
@@ -244,7 +279,7 @@ class CellResponse:
         """
         return int.from_bytes(self.value, byteorder="big", signed=True)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, use_nanoseconds=False) -> dict[str, Any]:
         """
         Returns a dictionary representation of the cell in the Bigtable Cell
         proto format
@@ -253,8 +288,11 @@ class CellResponse:
         """
         cell_dict = {
             "value": self.value,
-            "timestamp_micros": self.timestamp_ns // 1000,
         }
+        if use_nanoseconds:
+            cell_dict["timestamp_ns"] = self.timestamp_ns
+        else:
+            cell_dict["timestamp_micros"] = self.timestamp_ns // 1000
         if self.labels:
             cell_dict["labels"] = self.labels
         return cell_dict

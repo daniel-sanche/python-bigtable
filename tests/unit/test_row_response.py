@@ -94,12 +94,13 @@ class TestRowResponse(unittest.TestCase):
     def test__repr__(self):
         from google.cloud.bigtable.row_response import CellResponse
         from google.cloud.bigtable.row_response import RowResponse
-        cell_str = "CellResponse(value=b'1234', row=b'row', " + \
-            "family='cf1', column_qualifier=b'col', " + \
-            f"timestamp_ns={TEST_TIMESTAMP}, labels=['label1', 'label2'])"
+        cell_str = "{'value': b'1234', 'timestamp_ns': %d, 'labels': ['label1', 'label2']}" % (TEST_TIMESTAMP)
+        expected_prefix = f"RowResponse(key=b'row', cells="
         row = self._make_one(TEST_ROW_KEY, [self._make_cell()])
-        expected = f"RowResponse(key=b'row', cells=[{cell_str}])"
-        self.assertEqual(repr(row), expected)
+        self.assertIn(expected_prefix, repr(row))
+        self.assertIn(cell_str, repr(row))
+        expected_full = "RowResponse(key=b'row', cells={\n  ('cf1', b'col'): [{'value': b'1234', 'timestamp_ns': %d, 'labels': ['label1', 'label2']}],\n})" % (TEST_TIMESTAMP)
+        self.assertEqual(expected_full, repr(row))
         # should be able to construct instance from __repr__
         result = eval(repr(row))
         self.assertEqual(result, row)
@@ -107,13 +108,15 @@ class TestRowResponse(unittest.TestCase):
         self.assertIsInstance(result[0], CellResponse)
         # try with multiple cells
         row = self._make_one(TEST_ROW_KEY, [self._make_cell(), self._make_cell()])
-        expected = f"RowResponse(key=b'row', cells=[{cell_str}, {cell_str}])"
-        self.assertEqual(repr(row), expected)
+        self.assertIn(expected_prefix, repr(row))
+        self.assertIn(cell_str, repr(row))
         # should be able to construct instance from __repr__
         result = eval(repr(row))
         self.assertEqual(result, row)
         self.assertIsInstance(result, RowResponse)
+        self.assertEqual(len(result), 2)
         self.assertIsInstance(result[0], CellResponse)
+        self.assertIsInstance(result[1], CellResponse)
 
     def test___str__(self):
         pass
@@ -203,6 +206,15 @@ class TestCellResponse(unittest.TestCase):
         self.assertEqual(cell_proto.value, TEST_VALUE)
         self.assertEqual(cell_proto.timestamp_micros, TEST_TIMESTAMP//1000)
         self.assertEqual(cell_proto.labels, TEST_LABELS)
+
+    def test_to_dict_nanos_timestamp(self):
+        from google.cloud.bigtable_v2.types import Cell
+        cell = self._make_one()
+        cell_dict = cell.to_dict(use_nanoseconds=True)
+        expected_dict = { 'value': TEST_VALUE, "timestamp_ns": TEST_TIMESTAMP, 'labels': TEST_LABELS }
+        self.assertEqual(len(cell_dict), len(expected_dict))
+        for key, value in expected_dict.items():
+            self.assertEqual(cell_dict[key], value)
 
     def test_to_dict_no_labels(self):
         from google.cloud.bigtable_v2.types import Cell
