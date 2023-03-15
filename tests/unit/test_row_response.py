@@ -33,18 +33,82 @@ class TestRowResponse(unittest.TestCase):
         return RowResponse
 
     def _make_one(self, *args, **kwargs):
+        if len(args) == 0:
+            args = (TEST_VALUE, [self._make_cell()])
         return self._get_target_class()(*args, **kwargs)
 
+    def _make_cell(self, value=TEST_VALUE, row_key=TEST_ROW_KEY,
+                   family_id=TEST_FAMILY_ID, qualifier=TEST_QUALIFIER,
+                   timestamp=TEST_TIMESTAMP, labels=TEST_LABELS):
+        from google.cloud.bigtable.row_response import CellResponse
+        return CellResponse(value, row_key, family_id, qualifier, timestamp, labels)
+
+    def test_ctor(self):
+        cells = [self._make_cell(), self._make_cell()]
+        row_response = self._make_one(TEST_ROW_KEY, cells)
+        self.assertEqual(list(row_response), cells)
+        self.assertEqual(row_response.row_key, TEST_ROW_KEY)
+
+    def test_cell_order(self):
+        # cells should be ordered on init
+        cell1 = self._make_cell(value=b'1')
+        cell2 = self._make_cell(value=b'2')
+        resp = self._make_one(TEST_ROW_KEY, [cell2, cell1])
+        output = list(resp)
+        self.assertEqual(output, [cell1, cell2])
+
     def test_get_cells(self):
-        pass
-
-    def test__get_all_from_family(self):
-        pass
-
-    def test___str__(self):
-        pass
+        cell_list = []
+        for family_id in ["1", "2"]:
+            for qualifier in [b"a", b"b"]:
+                cell = self._make_cell(family_id=family_id, qualifier=qualifier)
+                cell_list.append(cell)
+        # test getting all cells
+        row_response = self._make_one(TEST_ROW_KEY, cell_list)
+        self.assertEqual(row_response.get_cells(), cell_list)
+        # test getting cells in a family
+        output = row_response.get_cells(family="1")
+        self.assertEqual(len(output), 2)
+        self.assertEqual(output[0].family, "1")
+        self.assertEqual(output[1].family, "1")
+        self.assertEqual(output[0], cell_list[0])
+        # test getting cells in a family/qualifier
+        # should accept bytes or str for qualifier
+        for q in [b"a", "a"]:
+            output = row_response.get_cells(family="1", qualifier=q)
+            self.assertEqual(len(output), 1)
+            self.assertEqual(output[0].family, "1")
+            self.assertEqual(output[0].column_qualifier, b"a")
+            self.assertEqual(output[0], cell_list[0])
+        # calling with just qualifier should raise an error
+        with self.assertRaises(ValueError):
+            row_response.get_cells(qualifier=b"a")
 
     def test__repr__(self):
+        from google.cloud.bigtable.row_response import CellResponse
+        from google.cloud.bigtable.row_response import RowResponse
+        cell_str = "CellResponse(value=b'1234', row=b'row', " + \
+            "family='cf1', column_qualifier=b'col', " + \
+            f"timestamp_ns={TEST_TIMESTAMP}, labels=['label1', 'label2'])"
+        row = self._make_one(TEST_ROW_KEY, [self._make_cell()])
+        expected = f"RowResponse(key=b'row', cells=[{cell_str}])"
+        self.assertEqual(repr(row), expected)
+        # should be able to construct instance from __repr__
+        result = eval(repr(row))
+        self.assertEqual(result, row)
+        self.assertIsInstance(result, RowResponse)
+        self.assertIsInstance(result[0], CellResponse)
+        # try with multiple cells
+        row = self._make_one(TEST_ROW_KEY, [self._make_cell(), self._make_cell()])
+        expected = f"RowResponse(key=b'row', cells=[{cell_str}, {cell_str}])"
+        self.assertEqual(repr(row), expected)
+        # should be able to construct instance from __repr__
+        result = eval(repr(row))
+        self.assertEqual(result, row)
+        self.assertIsInstance(result, RowResponse)
+        self.assertIsInstance(result[0], CellResponse)
+
+    def test___str__(self):
         pass
 
     def test_to_dict(self):
@@ -120,20 +184,28 @@ class TestCellResponse(unittest.TestCase):
         self.assertEqual(cell.labels, TEST_LABELS)
 
     def test_to_dict(self):
+        from google.cloud.bigtable_v2.types import Cell
         cell = self._make_one()
         cell_dict = cell.to_dict()
         expected_dict = { 'value': TEST_VALUE, 'timestamp_micros': TEST_TIMESTAMP//1000, 'labels': TEST_LABELS }
         self.assertEqual(len(cell_dict), len(expected_dict))
         for key, value in expected_dict.items():
             self.assertEqual(cell_dict[key], value)
+        # should be able to construct a Cell proto from the dict
+        cell_proto = Cell(**cell_dict)
+
+
 
     def test_to_dict_no_labels(self):
+        from google.cloud.bigtable_v2.types import Cell
         cell_no_labels = self._make_one(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, None)
         cell_dict = cell_no_labels.to_dict()
         expected_dict = { 'value': TEST_VALUE, 'timestamp_micros': TEST_TIMESTAMP//1000, 'labels': [] }
         self.assertEqual(len(cell_dict), len(expected_dict))
         for key, value in expected_dict.items():
             self.assertEqual(cell_dict[key], value)
+        # should be able to construct a Cell proto from the dict
+        cell_proto = Cell(**cell_dict)
 
     def test_int_value(self):
         test_int = 1234

@@ -119,7 +119,8 @@ class RowResponse(
 
     def __repr__(self):
         cell_reprs = [repr(cell) for cell in self._cells_list]
-        return f"RowResponse({self.row_key!r}, {cell_reprs})"
+        cell_reprs = ", ".join(cell_reprs)
+        return f"RowResponse(key={self.row_key!r}, cells=[{cell_reprs}])"
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -199,6 +200,11 @@ class RowResponse(
             for qualifier in self._cells_map[family]:
                 key_list.append((family, qualifier))
         return key_list
+
+    def __eq__(self, other):
+        if not isinstance(other, RowResponse):
+            return False
+        return self.row_key == other.row_key and self._cells_list == other._cells_list
 
 
 @total_ordering
