@@ -46,19 +46,31 @@ class ReadRowsQuery:
         self.limit = limit
         self.filter = row_filter
 
-    def set_limit(self, limit: int|None) -> ReadRowsQuery:
-        if limit is not None and limit < 0:
+    def get_limit(self) -> int | None:
+        return self._limit
+
+    def set_limit(self, new_limit: int|None):
+        if new_limit is not None and new_limit < 0:
             raise ValueError("limit must be >= 0")
-        self.limit = limit
+        self._limit = new_limit
         return self
 
-    def set_filter(self, row_filter: "RowFilter"|None) -> ReadRowsQuery:
-        self.filter = row_filter
+    def get_filter(self) -> RowFilter:
+        return self._filter
+
+    def set_filter(self, row_filter: "RowFilter"|None):
+        self._filter = row_filter
         return self
+
+
+    limit = property(get_limit, set_limit)
+    filter = property(get_filter, set_filter)
 
     def add_rows(self, row_keys: list[str | bytes] | str | bytes) -> ReadRowsQuery:
         if isinstance(row_keys, str) or isinstance(row_keys, bytes):
             row_keys = [row_keys]
+        elif not isinstance(row_keys, list):
+            raise ValueError("row_keys must be strings or bytes")
         for k in row_keys:
             if isinstance(k, str):
                 k = k.encode()
