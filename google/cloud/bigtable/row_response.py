@@ -116,18 +116,20 @@ class RowResponse(
         """
         Human-readable string representation
 
-        (family, qualifier)   num_cells
-        (ABC, XYZ)            14
-        (DEF, XYZ)            102
-        (GHI, XYZ)            9
+        {
+          (family='fam', qualifier=b'col'): [b'value', (+1 more),],
+          (family='fam', qualifier=b'col2'): [b'other'],
+        }
         """
-        output = []
-        output.append("(family, qualifier)\tnum_cells")
-        if len(self._cells_list) == 0:
-            output.append("-\t0")
-        else:
-            for title in self.keys():
-                output.append(f"{title}\t{len(self[title])}")
+        output = ["{"]
+        for key in self.keys():
+            if len(self[key]) == 0:
+                output.append(f"  {key}: []")
+            elif len(self[key]) == 1:
+                output.append(f"  (family='{key[0]}', qualifier={key[1]}): [{self[key][0]}],")
+            else:
+                output.append(f"  (family='{key[0]}', qualifier={key[1]}): [{self[key][0]}, (+{len(self[key])-1} more)],")
+        output.append("}")
         return "\n".join(output)
 
     def __repr__(self):
