@@ -36,8 +36,8 @@ class ReadRowsQuery:
     def __init__(
         self,
         row_keys: list[str | bytes] | str | bytes | None = None,
-        limit=None,
-        row_filter=None,
+        limit:int|None=None,
+        row_filter:RowFilter|None=None,
     ):
         self.row_keys: list[bytes] = []
         self.row_ranges: list[tuple[_RangePoint, _RangePoint]] = []
@@ -46,11 +46,13 @@ class ReadRowsQuery:
         self.limit = limit
         self.filter = row_filter
 
-    def set_limit(self, limit: int) -> ReadRowsQuery:
+    def set_limit(self, limit: int|None) -> ReadRowsQuery:
+        if limit is not None and limit < 0:
+            raise ValueError("limit must be >= 0")
         self.limit = limit
         return self
 
-    def set_filter(self, row_filter: "RowFilter") -> ReadRowsQuery:
+    def set_filter(self, row_filter: "RowFilter"|None) -> ReadRowsQuery:
         self.filter = row_filter
         return self
 
