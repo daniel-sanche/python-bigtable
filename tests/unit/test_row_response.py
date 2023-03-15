@@ -34,7 +34,7 @@ class TestRowResponse(unittest.TestCase):
 
     def _make_one(self, *args, **kwargs):
         if len(args) == 0:
-            args = (TEST_VALUE, [self._make_cell()])
+            args = (TEST_ROW_KEY, [self._make_cell()])
         return self._get_target_class()(*args, **kwargs)
 
     def _make_cell(self, value=TEST_VALUE, row_key=TEST_ROW_KEY,
@@ -145,7 +145,39 @@ class TestRowResponse(unittest.TestCase):
 
 
     def test_to_dict(self):
-        pass
+        from google.cloud.bigtable_v2.types import Row, Family, Column, Cell
+        cell1 = self._make_cell()
+        cell2 = self._make_cell()
+        cell2.value = b'other'
+        row = self._make_one(TEST_ROW_KEY, [cell1, cell2])
+        row_dict = row.to_dict()
+        expected_dict = { 'key': TEST_ROW_KEY, 'families': [
+            {"name": TEST_FAMILY_ID, "columns": [
+                {"qualifier": TEST_QUALIFIER, "cells": [
+                    {"value": TEST_VALUE, "timestamp_micros": TEST_TIMESTAMP//1000, "labels": TEST_LABELS},
+                    {"value": b"other", "timestamp_micros": TEST_TIMESTAMP//1000, "labels": TEST_LABELS}
+                ]}
+            ]},
+        ]}
+        self.assertEqual(len(row_dict), len(expected_dict))
+        for key, value in expected_dict.items():
+            self.assertEqual(row_dict[key], value)
+        # should be able to construct a Cell proto from the dict
+        row_proto = Row(**row_dict)
+        self.assertEqual(row_proto.key, TEST_ROW_KEY)
+        self.assertEqual(len(row_proto.families), 1)
+        family = row_proto.families[0]
+        self.assertEqual(family.name, TEST_FAMILY_ID)
+        self.assertEqual(len(family.columns), 1)
+        column = family.columns[0]
+        self.assertEqual(column.qualifier, TEST_QUALIFIER)
+        self.assertEqual(len(column.cells), 2)
+        self.assertEqual(column.cells[0].value, TEST_VALUE)
+        self.assertEqual(column.cells[0].timestamp_micros, TEST_TIMESTAMP//1000)
+        self.assertEqual(column.cells[0].labels, TEST_LABELS)
+        self.assertEqual(column.cells[1].value, cell2.value)
+        self.assertEqual(column.cells[1].timestamp_micros, TEST_TIMESTAMP//1000)
+        self.assertEqual(column.cells[1].labels, TEST_LABELS)
 
     def test_iteration(self):
         # should be able to iterate over the RowResponse as a list
