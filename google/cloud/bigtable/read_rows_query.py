@@ -40,6 +40,15 @@ class ReadRowsQuery:
         limit:int|None=None,
         row_filter:RowFilter|dict[str,Any]|None=None,
     ):
+        """
+        Create a new ReadRowsQuery
+
+        Args:
+          - row_keys: a list of row keys to include in the query
+          - limit: the maximum number of rows to return. None or 0 means no limit
+                default: None (no limit)
+          - row_filter: a RowFilter to apply to the query
+        """
         self.row_keys: set[bytes] = set()
         self.row_ranges: list[tuple[_RangePoint, _RangePoint]] = []
         if row_keys:
@@ -48,18 +57,45 @@ class ReadRowsQuery:
         self.filter:RowFilter|dict[str,Any] = row_filter
 
     def get_limit(self) -> int | None:
+        """
+        Get the limit for this query
+        """
         return self._limit
 
     def set_limit(self, new_limit: int|None):
+        """
+        Set the maximum number of rows to return by this query.
+
+        None or 0 means no limit
+
+        Args:
+          - new_limit: the new limit to apply to this query
+        Returns:
+          - a reference to this query for chaining
+        Raises:
+          - ValueError if new_limit is < 0
+        """
         if new_limit is not None and new_limit < 0:
             raise ValueError("limit must be >= 0")
         self._limit = new_limit
         return self
 
     def get_filter(self) -> RowFilter:
+        """
+        Get the filter for this query
+        """
         return self._filter
 
     def set_filter(self, row_filter: RowFilter|dict|None) -> ReadRowsQuery:
+        """
+        Set a RowFilter to apply to this query
+
+        Args:
+          - row_filter: a RowFilter to apply to this query
+              Can be a RowFilter object or a dict representation
+        Returns:
+          - a reference to this query for chaining
+        """
         if not (isinstance(row_filter, dict) or isinstance(row_filter, RowFilter) or row_filter is None):
             raise ValueError("row_filter must be a RowFilter or corresponding dict representation")
         self._filter = row_filter
@@ -70,6 +106,16 @@ class ReadRowsQuery:
     filter = property(get_filter, set_filter)
 
     def add_rows(self, row_keys: list[str | bytes] | str | bytes) -> ReadRowsQuery:
+        """
+        Add a list of row keys to this query
+
+        Args:
+          - row_keys: a list of row keys to add to this query
+        Returns:
+          - a reference to this query for chaining
+        Raises:
+          - ValueError if an input is not a string or bytes
+        """
         if not isinstance(row_keys, list):
             row_keys = [row_keys]
         update_set = set()
@@ -89,6 +135,15 @@ class ReadRowsQuery:
         start_is_inclusive: bool = True,
         end_is_inclusive: bool = False,
     ) -> ReadRowsQuery:
+        """
+        Add a range of row keys to this query.
+
+        Args:
+          - start_key: the start of the range
+          - end_key: the end of the range
+          - start_is_inclusive: if True, the start key is included in the range
+          - end_is_inclusive: if True, the end key is included in the range
+        """
         if isinstance(start_key, str):
             start_key = start_key.encode()
         elif start_key is not None and not isinstance(start_key, bytes):
