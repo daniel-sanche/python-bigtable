@@ -193,19 +193,23 @@ class TestCellResponse(unittest.TestCase):
             self.assertEqual(cell_dict[key], value)
         # should be able to construct a Cell proto from the dict
         cell_proto = Cell(**cell_dict)
-
-
+        self.assertEqual(cell_proto.value, TEST_VALUE)
+        self.assertEqual(cell_proto.timestamp_micros, TEST_TIMESTAMP//1000)
+        self.assertEqual(cell_proto.labels, TEST_LABELS)
 
     def test_to_dict_no_labels(self):
         from google.cloud.bigtable_v2.types import Cell
         cell_no_labels = self._make_one(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, None)
         cell_dict = cell_no_labels.to_dict()
-        expected_dict = { 'value': TEST_VALUE, 'timestamp_micros': TEST_TIMESTAMP//1000, 'labels': [] }
+        expected_dict = { 'value': TEST_VALUE, 'timestamp_micros': TEST_TIMESTAMP//1000 }
         self.assertEqual(len(cell_dict), len(expected_dict))
         for key, value in expected_dict.items():
             self.assertEqual(cell_dict[key], value)
         # should be able to construct a Cell proto from the dict
         cell_proto = Cell(**cell_dict)
+        self.assertEqual(cell_proto.value, TEST_VALUE)
+        self.assertEqual(cell_proto.timestamp_micros, TEST_TIMESTAMP//1000)
+        self.assertEqual(cell_proto.labels, [])
 
     def test_int_value(self):
         test_int = 1234

@@ -249,11 +249,13 @@ class CellResponse:
 
         https://cloud.google.com/bigtable/docs/reference/data/rpc/google.bigtable.v2#cell
         """
-        return {
+        cell_dict = {
             "value": self.value,
             "timestamp_micros": self.timestamp_ns // 1000,
-            "labels": self.labels,
         }
+        if self.labels:
+            cell_dict["labels"] = self.labels
+        return cell_dict
 
     def __str__(self) -> str:
         """
