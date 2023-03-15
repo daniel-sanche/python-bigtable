@@ -56,11 +56,7 @@ class ReadRowsQuery:
         self.limit:int|None = limit
         self.filter:RowFilter|dict[str,Any] = row_filter
 
-    def get_limit(self) -> int | None:
-        """
-        Get the limit for this query
-        """
-        return self._limit
+
 
     def set_limit(self, new_limit: int|None):
         """
@@ -80,11 +76,7 @@ class ReadRowsQuery:
         self._limit = new_limit
         return self
 
-    def get_filter(self) -> RowFilter:
-        """
-        Get the filter for this query
-        """
-        return self._filter
+
 
     def set_filter(self, row_filter: RowFilter|dict|None) -> ReadRowsQuery:
         """
@@ -100,10 +92,6 @@ class ReadRowsQuery:
             raise ValueError("row_filter must be a RowFilter or corresponding dict representation")
         self._filter = row_filter
         return self
-
-
-    limit = property(get_limit, set_limit)
-    filter = property(get_filter, set_filter)
 
     def add_rows(self, row_keys: list[str | bytes] | str | bytes) -> ReadRowsQuery:
         """
@@ -210,3 +198,20 @@ class ReadRowsQuery:
         if self.limit is not None:
             final_dict["rows_limit"] = self.limit
         return final_dict
+
+    # Support limit and filter as properties
+
+    def get_limit(self) -> int | None:
+        """
+        Getter implementation for limit property
+        """
+        return self._limit
+
+    def get_filter(self) -> RowFilter:
+        """
+        Getter implemntation for filter property
+        """
+        return self._filter
+
+    limit = property(get_limit, set_limit)
+    filter = property(get_filter, set_filter)

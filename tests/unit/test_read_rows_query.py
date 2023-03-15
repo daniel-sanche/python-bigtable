@@ -69,6 +69,10 @@ class TestReadRowsQuery(unittest.TestCase):
         result = query.set_filter(None)
         self.assertEqual(query.filter, None)
         self.assertEqual(result, query)
+        query.filter = RowFilterChain()
+        self.assertEqual(query.filter, RowFilterChain())
+        with self.assertRaises(ValueError):
+            query.filter = 1
     
     def test_set_filter_dict(self):
         from google.cloud.bigtable.row_filters import RowSampleFilter
@@ -85,6 +89,9 @@ class TestReadRowsQuery(unittest.TestCase):
         proto_output = ReadRowsRequest(**output)
         self.assertEqual(proto_output.filter, filter1.to_pb())
 
+        query.filter = None
+        self.assertEqual(query.filter, None)
+
 
     def test_set_limit(self):
         query = self._make_one()
@@ -92,11 +99,15 @@ class TestReadRowsQuery(unittest.TestCase):
         result = query.set_limit(10)
         self.assertEqual(query.limit, 10)
         self.assertEqual(result, query)
+        query.limit = 9
+        self.assertEqual(query.limit, 9)
         result = query.set_limit(0)
         self.assertEqual(query.limit, 0)
         self.assertEqual(result, query)
         with self.assertRaises(ValueError):
             query.set_limit(-1)
+        with self.assertRaises(ValueError):
+            query.limit = -100
 
     def test_add_rows_str(self):
         query = self._make_one()
