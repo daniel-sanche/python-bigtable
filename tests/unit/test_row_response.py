@@ -120,32 +120,116 @@ class TestCellResponse(unittest.TestCase):
         self.assertEqual(cell.labels, TEST_LABELS)
 
     def test_to_dict(self):
-        pass
+        cell = self._make_one()
+        cell_dict = cell.to_dict()
+        expected_dict = { 'value': TEST_VALUE, 'timestamp_micros': TEST_TIMESTAMP//1000, 'labels': TEST_LABELS }
+        self.assertEqual(len(cell_dict), len(expected_dict))
+        for key, value in expected_dict.items():
+            self.assertEqual(cell_dict[key], value)
+
+    def test_to_dict_no_labels(self):
+        cell_no_labels = self._make_one(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, None)
+        cell_dict = cell_no_labels.to_dict()
+        expected_dict = { 'value': TEST_VALUE, 'timestamp_micros': TEST_TIMESTAMP//1000, 'labels': [] }
+        self.assertEqual(len(cell_dict), len(expected_dict))
+        for key, value in expected_dict.items():
+            self.assertEqual(cell_dict[key], value)
 
     def test_int_value(self):
-        pass
+        test_int = 1234
+        bytes_value = test_int.to_bytes(4, 'big', signed=True)
+        cell = self._make_one(bytes_value, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        self.assertEqual(int(cell), test_int)
+        # ensure string formatting works
+        formatted = "%d" % cell
+        self.assertEqual(formatted, str(test_int))
+        self.assertEqual(int(formatted), test_int)
 
-    def test_int_value_string_formatting(self):
-        pass
+    def test_int_value_negative(self):
+        test_int = -99999
+        bytes_value = test_int.to_bytes(4, 'big', signed=True)
+        cell = self._make_one(bytes_value, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        self.assertEqual(int(cell), test_int)
+        # ensure string formatting works
+        formatted = "%d" % cell
+        self.assertEqual(formatted, str(test_int))
+        self.assertEqual(int(formatted), test_int)
 
     def test___str__(self):
-        pass
+        test_value = b'helloworld'
+        cell = self._make_one(test_value, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        self.assertEqual(str(cell), "b'helloworld'")
+        self.assertEqual(str(cell), str(test_value))
 
     def test___repr__(self):
-        pass
+        from google.cloud.bigtable.row_response import CellResponse
+        cell = self._make_one()
+        expected = "CellResponse(value=b'1234', row=b'row', " + \
+            "family='cf1', column_qualifier=b'col', " + \
+            f"timestamp_ns={TEST_TIMESTAMP}, labels=['label1', 'label2'])"
+        self.assertEqual(repr(cell), expected)
+        # should be able to construct instance from __repr__
+        result = eval(repr(cell))
+        self.assertEqual(result, cell)
 
-    def test_print(self):
-        pass
+    def test___repr___no_labels(self):
+        from google.cloud.bigtable.row_response import CellResponse
+        cell_no_labels = self._make_one(TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, None)
+        expected = "CellResponse(value=b'1234', row=b'row', " + \
+            "family='cf1', column_qualifier=b'col', " + \
+            f"timestamp_ns={TEST_TIMESTAMP}, labels=[])"
+        self.assertEqual(repr(cell_no_labels), expected)
+        # should be able to construct instance from __repr__
+        result = eval(repr(cell_no_labels))
+        self.assertEqual(result, cell_no_labels)
 
     def test_equality(self):
-        pass
+        cell1 = self._make_one()
+        cell2 = self._make_one()
+        self.assertEqual(cell1, cell2)
+        self.assertTrue(cell1 == cell2)
+        args = (TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        for i in range(0, len(args)):
+            # try changing each argument
+            modified_cell = self._make_one(*args[:i], args[i]+args[i], *args[i+1:])
+            self.assertNotEqual(cell1, modified_cell)
+            self.assertFalse(cell1 == modified_cell)
+            self.assertTrue(cell1 != modified_cell)
 
     def test_hash(self):
-        pass
+        # class should be hashable
+        cell1 = self._make_one()
+        d = {cell1: 1}
+        cell2 = self._make_one()
+        self.assertEqual(d[cell2], 1)
+
+        args = (TEST_VALUE, TEST_ROW_KEY, TEST_FAMILY_ID, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
+        for i in range(0, len(args)):
+            # try changing each argument
+            modified_cell = self._make_one(*args[:i], args[i]+args[i], *args[i+1:])
+            with self.assertRaises(KeyError):
+                d[modified_cell]
 
     def test_ordering(self):
-        pass
-
-    
+        # create cell list in order from lowest to highest
+        higher_cells = []
+        i = 0
+        # families; alphebetical order
+        for family in ["z", "y", "x"]:
+            # qualifiers; lowest byte value first
+            for qualifier in [b'z', b'y', b'x']:
+                # timestamps; newest first
+                for timestamp in [TEST_TIMESTAMP, TEST_TIMESTAMP+1, TEST_TIMESTAMP+2]:
+                    cell = self._make_one(TEST_VALUE, TEST_ROW_KEY, family, qualifier, timestamp, TEST_LABELS)
+                    # cell should be the highest priority encountered so far
+                    self.assertEqual(i, len(higher_cells))
+                    i+=1
+                    for other in higher_cells:
+                        self.assertLess(cell, other)
+                    higher_cells.append(cell)
+        # final order should be reverse of sorted order
+        expected_order = higher_cells
+        expected_order.reverse()
+        self.assertEqual(expected_order, sorted(higher_cells))
 
 

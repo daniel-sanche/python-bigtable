@@ -64,7 +64,7 @@ class RowResponse(
         """
         Returns cells sorted in Bigtable native order:
             - Family lexicographically ascending
-            - Qualifier lexicographically ascending
+            - Qualifier ascending
             - Timestamp in reverse chronological order
 
         If family or qualifier not passed, will include all
@@ -225,8 +225,6 @@ class CellResponse:
         self.row_key = row
         self.family = family
         self.column_qualifier = column_qualifier
-        # keep a utf-8 encoded string for lexical comparison
-        self._column_qualifier_str = column_qualifier.decode("UTF-8")
         self.timestamp_ns = timestamp_ns
         self.labels = labels if labels is not None else []
 
@@ -259,15 +257,15 @@ class CellResponse:
         return str(self.value)
 
     def __repr__(self):
-        return f"CellResponse(value={self.value!r} row={self.row_key!r}, family={self.family}, column_qualifier={self.column_qualifier!r}, timestamp_ns={self.timestamp_ns}, labels={self.labels})"
+        return f"CellResponse(value={self.value!r}, row={self.row_key!r}, family='{self.family}', column_qualifier={self.column_qualifier!r}, timestamp_ns={self.timestamp_ns}, labels={self.labels})"
 
     """For Bigtable native ordering"""
 
     def __lt__(self, other) -> bool:
         if not isinstance(other, CellResponse):
             return NotImplemented
-        this_ordering = (self.family, self._column_qualifier_str, self.timestamp_ns, self.value, self.labels)
-        other_ordering = (other.family, other._column_qualifier_str, other.timestamp_ns, other.value, other.labels)
+        this_ordering = (self.family, self.column_qualifier, -self.timestamp_ns, self.value, self.labels)
+        other_ordering = (other.family, other.column_qualifier, -other.timestamp_ns, other.value, other.labels)
         return this_ordering < other_ordering
 
     def __eq__(self, other) -> bool:
