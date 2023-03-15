@@ -515,8 +515,8 @@ class ValueRangeFilter(RowFilter):
         self,
         start_value: bytes | int | None = None,
         end_value: bytes | int | None = None,
-        inclusive_start: bool = None,
-        inclusive_end: bool = None,
+        inclusive_start: bool|None = None,
+        inclusive_end: bool|None = None,
     ):
         if inclusive_start is None:
             inclusive_start = True

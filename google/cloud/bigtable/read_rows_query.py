@@ -50,7 +50,7 @@ class ReadRowsQuery:
           - row_filter: a RowFilter to apply to the query
         """
         self.row_keys: set[bytes] = set()
-        self.row_ranges: list[tuple[_RangePoint, _RangePoint]] = []
+        self.row_ranges: list[tuple[_RangePoint|None, _RangePoint|None]] = []
         if row_keys:
             self.add_rows(row_keys)
         self.limit: int | None = limit
@@ -74,7 +74,7 @@ class ReadRowsQuery:
         self._limit = new_limit
         return self
 
-    def set_filter(self, row_filter: RowFilter | dict | None) -> ReadRowsQuery:
+    def set_filter(self, row_filter: RowFilter | dict[str, Any] | None) -> ReadRowsQuery:
         """
         Set a RowFilter to apply to this query
 
@@ -197,7 +197,7 @@ class ReadRowsQuery:
         row_keys = list(self.row_keys)
         row_keys.sort()
         row_set = {"row_keys": row_keys, "row_ranges": ranges}
-        final_dict = {
+        final_dict: dict[str, Any] = {
             "rows": row_set,
         }
         dict_filter = (
@@ -211,17 +211,30 @@ class ReadRowsQuery:
 
     # Support limit and filter as properties
 
-    def get_limit(self) -> int | None:
+    @property
+    def limit(self) -> int | None:
         """
         Getter implementation for limit property
         """
         return self._limit
 
-    def get_filter(self) -> RowFilter:
+    @limit.setter
+    def limit(self, new_limit: int | None):
+        """
+        Setter implementation for limit property
+        """
+        self.set_limit(new_limit)
+
+    @property
+    def filter(self):
         """
         Getter implemntation for filter property
         """
         return self._filter
 
-    limit = property(get_limit, set_limit)
-    filter = property(get_filter, set_filter)
+    @filter.setter
+    def filter(self, row_filter: RowFilter | dict[str,Any] | None):
+        """
+        Setter implementation for filter property
+        """
+        self.set_filter(row_filter)

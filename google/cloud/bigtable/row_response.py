@@ -46,7 +46,7 @@ class RowResponse(
         self,
         key: row_key,
         cells: list[CellResponse]
-        | dict[tuple[family_id, qualifier], list[CellResponse]],
+        | dict[tuple[family_id, qualifier], list[dict[str, Any]]],
     ):
         """Expected to be used internally only"""
         self.row_key = key
@@ -58,27 +58,29 @@ class RowResponse(
             # handle dict input
             tmp_list = []
             for (family, qualifier), cell_list in cells.items():
-                for cell in cell_list:
-                    timestamp = cell.get(
-                        "timestamp_ns", 1000 * cell.get("timestamp_micros", -1)
+                for cell_dict in cell_list:
+                    # Bigtable backend will use microseconds for timestamps,
+                    # but the Python library prefers nanoseconds where possible
+                    timestamp = cell_dict.get(
+                        "timestamp_ns", cell_dict.get("timestamp_micros", -1)*1000
                     )
                     if timestamp < 0:
                         raise ValueError("invalid timestamp")
-                    cell = CellResponse(
-                        cell["value"],
+                    cell_obj = CellResponse(
+                        cell_dict["value"],
                         key,
                         family,
                         qualifier,
                         timestamp,
-                        cell.get("labels", None),
+                        cell_dict.get("labels", None),
                     )
-                    tmp_list.append(cell)
+                    tmp_list.append(cell_obj)
             cells = tmp_list
         # add cells to internal stores using Bigtable native ordering
         for cell in sorted(cells):
             if cell.row_key != self.row_key:
                 raise ValueError(
-                    f"CellResponse row_key ({cell.row_key}) does not match RowResponse key ({self.row_key})"
+                    f"CellResponse row_key ({cell.row_key!r}) does not match RowResponse key ({self.row_key!r})"
                 )
             if cell.family not in self._cells_map:
                 self._cells_map[cell.family] = OrderedDict()
@@ -116,10 +118,10 @@ class RowResponse(
             qualifier = qualifier.encode("utf-8")
         # return cells in family and qualifier on get_cells(family, qualifier)
         if family not in self._cells_map:
-            raise ValueError(f"Family '{family}' not found in row '{self.row_key}'")
+            raise ValueError(f"Family '{family}' not found in row '{self.row_key!r}'")
         if qualifier not in self._cells_map[family]:
             raise ValueError(
-                f"Qualifier '{qualifier}' not found in family '{family}' in row '{self.row_key}'"
+                f"Qualifier '{qualifier!r}' not found in family '{family}' in row '{self.row_key!r}'"
             )
         return self._cells_map[family][qualifier]
 
@@ -130,7 +132,7 @@ class RowResponse(
         Returns all cells in the row
         """
         if family not in self._cells_map:
-            raise ValueError(f"Family '{family}' not found in row '{self.row_key}'")
+            raise ValueError(f"Family '{family}' not found in row '{self.row_key!r}'")
         qualifier_dict = self._cells_map.get(family, {})
         for cell_batch in qualifier_dict.values():
             for cell in cell_batch:
@@ -161,12 +163,12 @@ class RowResponse(
         return "\n".join(output)
 
     def __repr__(self):
-        cell_str = ["{"]
+        cell_str_buffer = ["{"]
         for key, cell_list in self.items():
             repr_list = [cell.to_dict(use_nanoseconds=True) for cell in cell_list]
-            cell_str.append(f"  ('{key[0]}', {key[1]}): {repr_list},")
-        cell_str.append("}")
-        cell_str = "\n".join(cell_str)
+            cell_str_buffer.append(f"  ('{key[0]}', {key[1]}): {repr_list},")
+        cell_str_buffer.append("}")
+        cell_str = "\n".join(cell_str_buffer)
         output = f"RowResponse(key={self.row_key!r}, cells={cell_str})"
         return output
 
@@ -177,16 +179,16 @@ class RowResponse(
 
         https://cloud.google.com/bigtable/docs/reference/data/rpc/google.bigtable.v2#row
         """
-        row_dict = {"key": self.row_key, "families": []}
+        families_list : list[dict[str,Any]] = []
         for family in self._cells_map:
-            family_dict = {"name": family, "columns": []}
+            column_list : list[dict[str, Any]]= []
             for qualifier in self._cells_map[family]:
-                column_dict = {"qualifier": qualifier, "cells": []}
+                cells_list: list[dict[str, Any]] = []
                 for cell in self._cells_map[family][qualifier]:
-                    column_dict["cells"].append(cell.to_dict())
-                family_dict["columns"].append(column_dict)
-            row_dict["families"].append(family_dict)
-        return row_dict
+                    cells_list.append(cell.to_dict())
+                column_list.append({"qualifier": qualifier, "cells": []})
+            families_list.append({"name": family, "columns": column_list})
+        return {"key": self.row_key, "families": families_list}
 
     # Sequence and Mapping methods
     def __iter__(self):
@@ -297,7 +299,7 @@ class CellResponse:
         value: row_value,
         row: row_key,
         family: family_id,
-        column_qualifier: qualifier,
+        column_qualifier: qualifier|str,
         timestamp_ns: int,
         labels: list[str] | None = None,
     ):
@@ -326,7 +328,7 @@ class CellResponse:
 
         https://cloud.google.com/bigtable/docs/reference/data/rpc/google.bigtable.v2#cell
         """
-        cell_dict = {
+        cell_dict : dict[str, Any] = {
             "value": self.value,
         }
         if use_nanoseconds:
