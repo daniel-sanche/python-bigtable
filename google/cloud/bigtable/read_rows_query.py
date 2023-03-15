@@ -39,7 +39,7 @@ class ReadRowsQuery:
         limit:int|None=None,
         row_filter:RowFilter|None=None,
     ):
-        self.row_keys: list[bytes] = []
+        self.row_keys: set[bytes] = set()
         self.row_ranges: list[tuple[_RangePoint, _RangePoint]] = []
         if row_keys:
             self.add_rows(row_keys)
@@ -67,14 +67,16 @@ class ReadRowsQuery:
     filter = property(get_filter, set_filter)
 
     def add_rows(self, row_keys: list[str | bytes] | str | bytes) -> ReadRowsQuery:
-        if isinstance(row_keys, str) or isinstance(row_keys, bytes):
+        if not isinstance(row_keys, list):
             row_keys = [row_keys]
-        elif not isinstance(row_keys, list):
-            raise ValueError("row_keys must be strings or bytes")
+        update_set = set()
         for k in row_keys:
             if isinstance(k, str):
                 k = k.encode()
-            self.row_keys.append(k)
+            elif not isinstance(k, bytes):
+                raise ValueError("row_keys must be strings or bytes")
+            update_set.add(k)
+        self.row_keys.update(update_set)
         return self
 
     def add_range(
@@ -125,7 +127,7 @@ class ReadRowsQuery:
                 key = "end_key_closed" if end.is_inclusive else "end_key_open"
                 new_range[key] = end.key
             ranges.append(new_range)
-        row_set = {"row_keys": self.row_keys, "row_ranges": ranges}
+        row_set = {"row_keys": list(self.row_keys), "row_ranges": ranges}
         final_dict = {
             "rows": row_set,
             "filter": self.filter.to_dict(),
