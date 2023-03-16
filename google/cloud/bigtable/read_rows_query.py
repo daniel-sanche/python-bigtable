@@ -50,7 +50,7 @@ class ReadRowsQuery:
           - row_filter: a RowFilter to apply to the query
         """
         self.row_keys: set[bytes] = set()
-        self.row_ranges: list[tuple[_RangePoint|None, _RangePoint|None]] = []
+        self.row_ranges: list[tuple[_RangePoint | None, _RangePoint | None]] = []
         if row_keys:
             self.add_rows(row_keys)
         self.limit: int | None = limit
@@ -74,7 +74,9 @@ class ReadRowsQuery:
         self._limit = new_limit
         return self
 
-    def set_filter(self, row_filter: RowFilter | dict[str, Any] | None) -> ReadRowsQuery:
+    def set_filter(
+        self, row_filter: RowFilter | dict[str, Any] | None
+    ) -> ReadRowsQuery:
         """
         Set a RowFilter to apply to this query
 
@@ -233,7 +235,7 @@ class ReadRowsQuery:
         return self._filter
 
     @filter.setter
-    def filter(self, row_filter: RowFilter | dict[str,Any] | None):
+    def filter(self, row_filter: RowFilter | dict[str, Any] | None):
         """
         Setter implementation for filter property
         """

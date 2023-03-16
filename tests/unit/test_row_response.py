@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import mock
-import pytest
 import unittest
 
 import time
@@ -121,7 +119,7 @@ class TestRowResponse(unittest.TestCase):
         with self.assertRaises(ValueError):
             row_response.get_cells(family="3", qualifier=b"a")
         with self.assertRaises(ValueError):
-            response = row_response.get_cells(family="3")
+            row_response.get_cells(family="3")
         with self.assertRaises(ValueError):
             row_response.get_cells(family="1", qualifier=b"c")
 
@@ -133,7 +131,7 @@ class TestRowResponse(unittest.TestCase):
             "{'value': b'1234', 'timestamp_ns': %d, 'labels': ['label1', 'label2']}"
             % (TEST_TIMESTAMP)
         )
-        expected_prefix = f"RowResponse(key=b'row', cells="
+        expected_prefix = "RowResponse(key=b'row', cells="
         row = self._make_one(TEST_ROW_KEY, [self._make_cell()])
         self.assertIn(expected_prefix, repr(row))
         self.assertIn(cell_str, repr(row))
@@ -179,7 +177,7 @@ class TestRowResponse(unittest.TestCase):
         self.assertEqual(expected, str(row_response))
 
     def test_to_dict(self):
-        from google.cloud.bigtable_v2.types import Row, Family, Column, Cell
+        from google.cloud.bigtable_v2.types import Row
 
         cell1 = self._make_cell()
         cell2 = self._make_cell()
@@ -595,8 +593,6 @@ class TestCellResponse(unittest.TestCase):
         self.assertEqual(cell_proto.labels, TEST_LABELS)
 
     def test_to_dict_nanos_timestamp(self):
-        from google.cloud.bigtable_v2.types import Cell
-
         cell = self._make_one()
         cell_dict = cell.to_dict(use_nanoseconds=True)
         expected_dict = {
@@ -681,7 +677,7 @@ class TestCellResponse(unittest.TestCase):
         self.assertEqual(str(cell), str(test_value))
 
     def test___repr__(self):
-        from google.cloud.bigtable.row_response import CellResponse
+        from google.cloud.bigtable.row_response import CellResponse  # type: ignore # noqa: F401
 
         cell = self._make_one()
         expected = (
@@ -695,7 +691,7 @@ class TestCellResponse(unittest.TestCase):
         self.assertEqual(result, cell)
 
     def test___repr___no_labels(self):
-        from google.cloud.bigtable.row_response import CellResponse
+        from google.cloud.bigtable.row_response import CellResponse  # type: ignore # noqa: F401
 
         cell_no_labels = self._make_one(
             TEST_VALUE,

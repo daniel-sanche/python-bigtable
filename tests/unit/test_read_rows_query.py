@@ -12,11 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import mock
-import pytest
 import unittest
-
-import time
 
 TEST_ROWS = [
     "row_key_1",

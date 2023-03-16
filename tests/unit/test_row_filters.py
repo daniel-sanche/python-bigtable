@@ -433,7 +433,6 @@ def test_timestamp_range_filter___ne__():
 
 def test_timestamp_range_filter_to_pb():
     from google.cloud.bigtable.row_filters import TimestampRangeFilter
-    from google.cloud.bigtable.row_filters import TimestampRange
 
     row_filter = TimestampRangeFilter()
     pb_val = row_filter.to_pb()
@@ -1250,10 +1249,8 @@ def test_row_filter_chain_to_dict_nested():
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
 
     row_filter1 = StripValueTransformerFilter(True)
-    row_filter1_dict = row_filter1.to_dict()
 
     row_filter2 = RowSampleFilter(0.25)
-    row_filter2_dict = row_filter2.to_dict()
 
     row_filter3 = RowFilterChain(filters=[row_filter1, row_filter2])
     row_filter3_dict = row_filter3.to_dict()
@@ -1343,10 +1340,8 @@ def test_row_filter_union_to_dict_nested():
     from google.cloud.bigtable_v2.types import data as data_v2_pb2
 
     row_filter1 = StripValueTransformerFilter(True)
-    row_filter1_dict = row_filter1.to_dict()
 
     row_filter2 = RowSampleFilter(0.25)
-    row_filter2_dict = row_filter2.to_dict()
 
     row_filter3 = RowFilterUnion(filters=[row_filter1, row_filter2])
     row_filter3_dict = row_filter3.to_dict()
