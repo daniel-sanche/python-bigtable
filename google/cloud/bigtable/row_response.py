@@ -59,20 +59,8 @@ class RowResponse(
             tmp_list = []
             for (family, qualifier), cell_list in cells.items():
                 for cell_dict in cell_list:
-                    # Bigtable backend will use microseconds for timestamps,
-                    # but the Python library prefers nanoseconds where possible
-                    timestamp = cell_dict.get(
-                        "timestamp_ns", cell_dict.get("timestamp_micros", -1)*1000
-                    )
-                    if timestamp < 0:
-                        raise ValueError("invalid timestamp")
-                    cell_obj = CellResponse(
-                        cell_dict["value"],
-                        key,
-                        family,
-                        qualifier,
-                        timestamp,
-                        cell_dict.get("labels", None),
+                    cell_obj = CellResponse._from_dict(
+                        key, family, qualifier, cell_dict
                     )
                     tmp_list.append(cell_obj)
             cells = tmp_list
@@ -179,14 +167,14 @@ class RowResponse(
 
         https://cloud.google.com/bigtable/docs/reference/data/rpc/google.bigtable.v2#row
         """
-        families_list : list[dict[str,Any]] = []
+        families_list: list[dict[str, Any]] = []
         for family in self._cells_map:
-            column_list : list[dict[str, Any]]= []
+            column_list: list[dict[str, Any]] = []
             for qualifier in self._cells_map[family]:
                 cells_list: list[dict[str, Any]] = []
                 for cell in self._cells_map[family][qualifier]:
                     cells_list.append(cell.to_dict())
-                column_list.append({"qualifier": qualifier, "cells": []})
+                column_list.append({"qualifier": qualifier, "cells": cells_list})
             families_list.append({"name": family, "columns": column_list})
         return {"key": self.row_key, "families": families_list}
 
@@ -299,11 +287,16 @@ class CellResponse:
         value: row_value,
         row: row_key,
         family: family_id,
-        column_qualifier: qualifier|str,
+        column_qualifier: qualifier | str,
         timestamp_ns: int,
         labels: list[str] | None = None,
     ):
-        """Expected to be used internally only"""
+        """
+        CellResponse constructor
+
+        CellResponse objects are not intended to be constructed by users.
+        They are returned by the Bigtable backend.
+        """
         self.value = value
         self.row_key = row
         self.family = family
@@ -312,6 +305,33 @@ class CellResponse:
         self.column_qualifier = column_qualifier
         self.timestamp_ns = timestamp_ns
         self.labels = labels if labels is not None else []
+
+    @staticmethod
+    def _from_dict(
+        row_key: bytes, family: str, qualifier: bytes, cell_dict: dict[str, Any]
+    ) -> CellResponse:
+        """
+        Helper function to create CellResponse from a dictionary
+
+        CellResponse objects are not intended to be constructed by users.
+        They are returned by the Bigtable backend.
+        """
+        # Bigtable backend will use microseconds for timestamps,
+        # but the Python library prefers nanoseconds where possible
+        timestamp = cell_dict.get(
+            "timestamp_ns", cell_dict.get("timestamp_micros", -1) * 1000
+        )
+        if timestamp < 0:
+            raise ValueError("invalid timestamp")
+        cell_obj = CellResponse(
+            cell_dict["value"],
+            row_key,
+            family,
+            qualifier,
+            timestamp,
+            cell_dict.get("labels", None),
+        )
+        return cell_obj
 
     def __int__(self) -> int:
         """
@@ -328,7 +348,7 @@ class CellResponse:
 
         https://cloud.google.com/bigtable/docs/reference/data/rpc/google.bigtable.v2#cell
         """
-        cell_dict : dict[str, Any] = {
+        cell_dict: dict[str, Any] = {
             "value": self.value,
         }
         if use_nanoseconds:
