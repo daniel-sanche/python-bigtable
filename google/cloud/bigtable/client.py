@@ -295,6 +295,7 @@ class BigtableDataClient(ClientWithProject):
         default_operation_timeout: float = 60,
         default_per_row_timeout: float | None = 10,
         default_per_request_timeout: float | None = None,
+        enable_metrics: bool = False,
     ) -> Table:
         """
         Returns a table instance for making data API requests
@@ -315,6 +316,7 @@ class BigtableDataClient(ClientWithProject):
             default_operation_timeout=default_operation_timeout,
             default_per_row_timeout=default_per_row_timeout,
             default_per_request_timeout=default_per_request_timeout,
+            enable_metrics=enable_metrics
         )
 
     async def __aenter__(self):
@@ -344,6 +346,7 @@ class Table:
         default_operation_timeout: float = 60,
         default_per_row_timeout: float | None = 10,
         default_per_request_timeout: float | None = None,
+        enable_metrics: bool = False,
     ):
         """
         Initialize a Table instance
@@ -404,6 +407,39 @@ class Table:
             raise RuntimeError(
                 f"{self.__class__.__name__} must be created within an async event loop context."
             ) from e
+
+        if enable_metrics:
+            from opentelemetry import metrics
+            meter = metrics.get_meter(__name__)
+            self.op_latency = meter.create_histogram(
+                name="op_latency",
+                description="A distribution of latency of each client method call, across all of it's RPC attempts. Tagged by operation name and final response status.",
+                unit="ms",
+                value_type=float,
+            )
+            self.completed_ops = meter.create_counter(
+                name="completed_ops",
+                description="The total count of method invocations. Tagged by operation name and final response status",
+                unit="1",
+                value_type=int,
+            )
+            self.read_rows_first_row_latency = meter.create_histogram(
+                name="read_rows_first_row_latency",
+                description="A distribution of the latency of receiving the first row in a ReadRows operation.",
+                unit="ms",
+                value_type=float,
+            )
+            self.attempt_latency = meter.create_histogram(
+                name="attempt_latency",
+                description="A distribution of latency of each client RPC, tagged by operation name and the attempt status. Under normal circumstances, this will be identical to op_latency. However, when the client receives transient errors, op_latency will be the sum of all attempt_latencies and the exponential delays.",
+                unit="ms",
+                value_type=float,
+            )
+            self.attempts_per_op = meter.create_histogram(
+                name="attempts_per_op",
+                description="A distribution of attempts that each operation required, tagged by operation name and final operation status. Under normal circumstances, this will be 1.",
+                value_type=int,
+            )
 
     async def read_rows_stream(
         self,
