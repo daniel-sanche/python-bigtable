@@ -411,7 +411,7 @@ class Table:
         if enable_metrics:
             # only import if metrics are enabled
             from google.cloud.bigtable.metrics import BigtableClientSideMetrics
-            self.metrics = BigtableClientSideMetrics()
+            self.metrics = BigtableClientSideMetrics(client.project, instance_id, app_profile_id)
 
     async def read_rows_stream(
         self,
@@ -491,6 +491,7 @@ class Table:
             operation_timeout=operation_timeout,
             per_row_timeout=per_row_timeout,
             per_request_timeout=per_request_timeout,
+            metrics=self.metrics,
         )
         output_generator = ReadRowsIterator(row_merger)
         # add idle timeout to clear resources if generator is abandoned

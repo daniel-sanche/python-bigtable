@@ -14,6 +14,13 @@
 #
 from __future__ import annotations
 
+from typing import Tuple
+
+from uuid import uuid4
+from uuid import UUID
+import time
+from dataclasses import dataclass
+
 
 class BigtableClientSideMetrics():
 
@@ -52,15 +59,41 @@ class BigtableClientSideMetrics():
         self.shared_labels = {"bigtable_project_id": project_id, "bigtable_instance_id": instance_id}
         if app_profile_id:
             self.shared_labels["bigtable_app_profile_id"] = app_profile_id
+        self._active_ops: dict[UUID, Tuple[float, float]] = {}
 
-    def record_op_attempt(self, op_name, status, attempt_latency):
-        self.attempt_latency.record(attempt_latency, {"op_name": op_name, "status": status})
+    def record_op_start(self, op_type:str) -> UUID:
+        start_time = time.time()
+        op_id = uuid4()
+        self._active_ops[op_id] = _MetricOperation(op_type, start_time, start_time, 0)
+        return op_id
 
-    def record_op_complete(self, op_name, status, num_attempts, op_latency):
-        labels = {"op_name": op_name, "status": status, **self.shared_labels}
+    def record_attempt_start(self, op_id:UUID):
+        self._active_ops[op_id].attempt_start_time = time.time()
+
+    def record_op_attempt_complete(self, op_id:UUID, status:str):
+        op = self._active_ops[op_id]
+        current_time = time.time()
+        attempt_latency = current_time - op.attempt_start_time
+        op.attempt_start_time = current_time
+        op.num_retries += 1
+        self.attempt_latency.record(attempt_latency, {"op_name": op.name, "status": status})
+
+    def record_op_complete(self, op_id:UUID, status:str):
+        op = self._active_ops[op_id]
+        del self._active_ops[op_id]
+        labels = {"op_name": op.name, "status": status, **self.shared_labels}
+        op_latency = time.time() - op.start_time
         self.completed_ops.add(1, labels)
-        self.attempts_per_op.record(num_attempts, labels)
+        self.attempts_per_op.record(op.num_retries + 1, labels)
         self.op_latency.record(op_latency, labels)
 
     def record_read_rows_first_row_latency(self, latency):
         self.read_rows_first_row_latency.record(latency, self.shared_labels)
+
+
+@dataclass
+class _MetricOperation:
+    name: str
+    start_time: float
+    attempt_start_time: float
+    num_retries: int

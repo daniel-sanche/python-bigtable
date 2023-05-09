@@ -74,6 +74,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         buffer_size: int = 0,
         per_row_timeout: float | None = None,
         per_request_timeout: float | None = None,
+        metrics: "BigtableClientSideMetrics" | None = None,
     ):
         """
         Args:
