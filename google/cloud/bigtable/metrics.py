@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
 
 
 class BigtableClientSideMetrics():
 
-    def __init__(self):
+    def __init__(self, project_id:str, instance_id:str, app_profile_id:str | None):
         from opentelemetry import metrics
         meter = metrics.get_meter(__name__)
         self.op_latency = meter.create_histogram(
@@ -48,3 +49,18 @@ class BigtableClientSideMetrics():
             description="A distribution of attempts that each operation required, tagged by operation name and final operation status. Under normal circumstances, this will be 1.",
             value_type=int,
         )
+        self.shared_labels = {"bigtable_project_id": project_id, "bigtable_instance_id": instance_id}
+        if app_profile_id:
+            self.shared_labels["bigtable_app_profile_id"] = app_profile_id
+
+    def record_op_attempt(self, op_name, status, attempt_latency):
+        self.attempt_latency.record(attempt_latency, {"op_name": op_name, "status": status})
+
+    def record_op_complete(self, op_name, status, num_attempts, op_latency):
+        labels = {"op_name": op_name, "status": status, **self.shared_labels}
+        self.completed_ops.add(1, labels)
+        self.attempts_per_op.record(num_attempts, labels)
+        self.op_latency.record(op_latency, labels)
+
+    def record_read_rows_first_row_latency(self, latency):
+        self.read_rows_first_row_latency.record(latency, self.shared_labels)
