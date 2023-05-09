@@ -85,6 +85,13 @@ class _ReadRowsOperation(AsyncIterable[Row]):
           - per_row_timeout: the timeout to use when waiting for each individual row, in seconds
           - per_request_timeout: the timeout to use when waiting for each individual grpc request, in seconds
         """
+        self.metrics = metrics
+        attempt_start_callback, attempt_end_callback, operation_end_callback = None, None, None
+        if metrics:
+            operation_id = metrics.record_operation_start("read_rows")
+            attempt_start_callback = partial(metrics.record_attempt_start, operation_id)
+            attempt_end_callback = partial(metrics.record_attempt_end, operation_id)
+            operation_end_callback = partial(metrics.record_operation_end, operation_id)
         self._last_seen_row_key: bytes | None = None
         self._emit_count = 0
         buffer_size = max(buffer_size, 0)
@@ -99,6 +106,8 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             per_row_timeout,
             per_request_timeout,
             row_limit,
+            attempt_start_callback,
+            operation_end_callback,
         )
         predicate = retries.if_exception_type(
             core_exceptions.DeadlineExceeded,
@@ -107,8 +116,15 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         )
 
         def on_error_fn(exc):
+            # record attempt complete
+            if attempt_end_callback:
+                attempt_end_callback(exc.grpc_status_code)
+            # attach errors to list
             if predicate(exc):
                 self.transient_errors.append(exc)
+            elif operation_end_callback:
+                # record terminal error
+                operation_end_callback(exc.grpc_status_code)
 
         retry = retries.AsyncRetry(
             predicate=predicate,
@@ -181,6 +197,8 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         per_row_timeout: float | None,
         per_request_timeout: float | None,
         total_row_limit: int,
+        on_start: Callable[None, None] | None,
+        on_complete: Callable[None, None] | None,
     ) -> AsyncGenerator[Row | RequestStats, None]:
         """
         Retryable wrapper for merge_rows. This function is called each time
@@ -195,6 +213,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             duplicate rows are not emitted
           - request is stored and (optionally) modified on each retry
         """
+        on_start()
         if self._last_seen_row_key is not None:
             # if this is a retry, try to trim down the request to avoid ones we've already processed
             self._request["rows"] = _ReadRowsOperation._revise_request_rowset(
@@ -251,6 +270,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             )
         except StopAsyncIteration:
             # end of stream
+            on_complete(0)
             return
         finally:
             buffer_task.cancel()
