@@ -20,6 +20,7 @@ from google.cloud.bigtable_v2.types import RequestStats
 from google.cloud.bigtable.row import Row, Cell, _LastScannedRow
 from google.cloud.bigtable.exceptions import InvalidChunk
 import asyncio
+import time
 from functools import partial
 from google.api_core import retry_async as retries
 from google.api_core import exceptions as core_exceptions
@@ -85,6 +86,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
           - per_row_timeout: the timeout to use when waiting for each individual row, in seconds
           - per_request_timeout: the timeout to use when waiting for each individual grpc request, in seconds
         """
+        self._first_request = True
         self.metrics = metrics
         attempt_start_callback, attempt_end_callback, operation_end_callback = None, None, None
         if metrics:
@@ -148,7 +150,13 @@ class _ReadRowsOperation(AsyncIterable[Row]):
     async def __anext__(self) -> Row | RequestStats:
         """Implements the AsyncIterator interface"""
         if self._stream is not None:
-            return await self._stream.__anext__()
+            # record first request latency if metrics are enabled
+            start_time = time.monotonic() if (self.metrics and self._first_request) else None
+            next_item = await self._stream.__anext__()
+            if start_time and self.metrics:
+                self.metrics.record_first_response_latency(time.monotonic() - start_time)
+                self._first_request = False
+            return next_item
         else:
             raise asyncio.InvalidStateError("stream is closed")
 
