@@ -62,17 +62,17 @@ class BigtableClientSideMetrics():
         self._active_ops: dict[UUID, Tuple[float, float]] = {}
 
     def record_operation_start(self, op_type:str) -> UUID:
-        start_time = time.time()
+        start_time = time.monotonic()
         op_id = uuid4()
         self._active_ops[op_id] = _MetricOperation(op_type, start_time, start_time, 0)
         return op_id
 
     def record_attempt_start(self, op_id:UUID):
-        self._active_ops[op_id].attempt_start_time = time.time()
+        self._active_ops[op_id].attempt_start_time = time.monotonic()
 
     def record_attempt_complete(self, op_id:UUID, status:int):
         op = self._active_ops[op_id]
-        current_time = time.time()
+        current_time = time.monotonic()
         attempt_latency = current_time - op.attempt_start_time
         op.attempt_start_time = current_time
         op.num_retries += 1
@@ -82,7 +82,7 @@ class BigtableClientSideMetrics():
         op = self._active_ops[op_id]
         del self._active_ops[op_id]
         labels = {"op_name": op.name, "status": status, **self.shared_labels}
-        op_latency = time.time() - op.start_time
+        op_latency = time.monotonic() - op.start_time
         self.completed_ops.add(1, labels)
         self.attempts_per_op.record(op.num_retries + 1, labels)
         self.op_latency.record(op_latency, labels)
