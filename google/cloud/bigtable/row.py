@@ -19,10 +19,8 @@ from typing import Sequence, Generator, overload, Any, Set
 from functools import total_ordering
 
 # Type aliases used internally for readability.
-row_key = bytes
-family_id = str
-qualifier = bytes
-row_value = bytes
+_family_type = str
+_qualifier_type = bytes
 
 
 class Row(Sequence["Cell"]):
@@ -36,11 +34,12 @@ class Row(Sequence["Cell"]):
     Can be indexed:
     cells = row["family", "qualifier"]
     """
+
     __slots__ = ("row_key", "cells", "_index_data")
 
     def __init__(
         self,
-        key: row_key,
+        key: bytes,
         cells: list[Cell],
     ):
         """
@@ -52,10 +51,14 @@ class Row(Sequence["Cell"]):
         self.row_key = key
         self.cells: list[Cell] = cells
         # index is lazily created when needed
-        self._index_data: OrderedDict[family_id, OrderedDict[qualifier, list[Cell]]] | None = None
+        self._index_data: OrderedDict[
+            _family_type, OrderedDict[_qualifier_type, list[Cell]]
+        ] | None = None
 
     @property
-    def _index(self) -> OrderedDict[family_id, OrderedDict[qualifier, list[Cell]]]:
+    def _index(
+        self,
+    ) -> OrderedDict[_family_type, OrderedDict[_qualifier_type, list[Cell]]]:
         """
         Returns an index of cells associated with each family and qualifier.
 
@@ -64,7 +67,9 @@ class Row(Sequence["Cell"]):
         if self._index_data is None:
             self._index_data = OrderedDict()
             for cell in self.cells:
-                self._index_data.setdefault(cell.family, OrderedDict()).setdefault(cell.column_qualifier, []).append(cell)
+                self._index_data.setdefault(cell.family, OrderedDict()).setdefault(
+                    cell.qualifier, []
+                ).append(cell)
         return self._index_data
 
     def get_cells(
@@ -103,7 +108,7 @@ class Row(Sequence["Cell"]):
             )
         return self._index[family][qualifier]
 
-    def _get_all_from_family(self, family: family_id) -> Generator[Cell, None, None]:
+    def _get_all_from_family(self, family: str) -> Generator[Cell, None, None]:
         """
         Returns all cells in the row for the family_id
         """
@@ -158,7 +163,9 @@ class Row(Sequence["Cell"]):
             qualifier_list = []
             for qualifier_name, cell_list in qualifier_dict.items():
                 cell_dicts = [cell.to_dict() for cell in cell_list]
-                qualifier_list.append({"qualifier": qualifier_name, "cells": cell_dicts})
+                qualifier_list.append(
+                    {"qualifier": qualifier_name, "cells": cell_dicts}
+                )
             family_list.append({"name": family_name, "columns": qualifier_list})
         return {"key": self.row_key, "families": family_list}
 
@@ -176,12 +183,12 @@ class Row(Sequence["Cell"]):
         Works for both cells in the internal list, and `family` or
         `(family, qualifier)` pairs associated with the cells
         """
-        if isinstance(item, family_id):
+        if isinstance(item, _family_type):
             return item in self._index
         elif (
             isinstance(item, tuple)
-            and isinstance(item[0], family_id)
-            and isinstance(item[1], (qualifier, str))
+            and isinstance(item[0], _family_type)
+            and isinstance(item[1], (bytes, str))
         ):
             q = item[1] if isinstance(item[1], bytes) else item[1].encode("utf-8")
             return item[0] in self._index and q in self._index[item[0]]
@@ -191,7 +198,7 @@ class Row(Sequence["Cell"]):
     @overload
     def __getitem__(
         self,
-        index: family_id | tuple[family_id, qualifier | str],
+        index: str | tuple[str, bytes | str],
     ) -> list[Cell]:
         # overload signature for type checking
         pass
@@ -213,12 +220,12 @@ class Row(Sequence["Cell"]):
         Supports indexing by family, (family, qualifier) pair,
         numerical index, and index slicing
         """
-        if isinstance(index, family_id):
+        if isinstance(index, _family_type):
             return self.get_cells(family=index)
         elif (
             isinstance(index, tuple)
-            and isinstance(index[0], family_id)
-            and isinstance(index[1], (qualifier, str))
+            and isinstance(index[0], _family_type)
+            and isinstance(index[1], (bytes, str))
         ):
             return self.get_cells(family=index[0], qualifier=index[1])
         elif isinstance(index, int) or isinstance(index, slice):
@@ -235,7 +242,7 @@ class Row(Sequence["Cell"]):
         """
         return len(self.cells)
 
-    def get_column_components(self) -> list[tuple[family_id, qualifier]]:
+    def get_column_components(self) -> list[tuple[str, bytes]]:
         """
         Returns a list of (family, qualifier) pairs associated with the cells
 
@@ -301,14 +308,21 @@ class Cell:
     Expected to be read-only to users, and written by backend
     """
 
-    __slots__ = ("value", "row_key", "family", "column_qualifier", "timestamp_micros", "labels")
+    __slots__ = (
+        "value",
+        "row_key",
+        "family",
+        "qualifier",
+        "timestamp_micros",
+        "labels",
+    )
 
     def __init__(
         self,
-        value: row_value,
-        row: row_key,
-        family: family_id,
-        column_qualifier: qualifier | str,
+        value: bytes,
+        row_key: bytes,
+        family: str,
+        qualifier: bytes | str,
         timestamp_micros: int,
         labels: list[str] | None = None,
     ):
@@ -319,11 +333,11 @@ class Cell:
         They are returned by the Bigtable backend.
         """
         self.value = value
-        self.row_key = row
+        self.row_key = row_key
         self.family = family
-        if isinstance(column_qualifier, str):
-            column_qualifier = column_qualifier.encode()
-        self.column_qualifier = column_qualifier
+        if isinstance(qualifier, str):
+            qualifier = qualifier.encode()
+        self.qualifier = qualifier
         self.timestamp_micros = timestamp_micros
         self.labels = labels if labels is not None else []
 
@@ -361,7 +375,7 @@ class Cell:
         """
         Returns a string representation of the cell
         """
-        return f"Cell(value={self.value!r}, row={self.row_key!r}, family='{self.family}', column_qualifier={self.column_qualifier!r}, timestamp_micros={self.timestamp_micros}, labels={self.labels})"
+        return f"Cell(value={self.value!r}, row_key={self.row_key!r}, family='{self.family}', qualifier={self.qualifier!r}, timestamp_micros={self.timestamp_micros}, labels={self.labels})"
 
     """For Bigtable native ordering"""
 
@@ -373,14 +387,14 @@ class Cell:
             return NotImplemented
         this_ordering = (
             self.family,
-            self.column_qualifier,
+            self.qualifier,
             -self.timestamp_micros,
             self.value,
             self.labels,
         )
         other_ordering = (
             other.family,
-            other.column_qualifier,
+            other.qualifier,
             -other.timestamp_micros,
             other.value,
             other.labels,
@@ -396,7 +410,7 @@ class Cell:
         return (
             self.row_key == other.row_key
             and self.family == other.family
-            and self.column_qualifier == other.column_qualifier
+            and self.qualifier == other.qualifier
             and self.value == other.value
             and self.timestamp_micros == other.timestamp_micros
             and len(self.labels) == len(other.labels)
@@ -417,7 +431,7 @@ class Cell:
             (
                 self.row_key,
                 self.family,
-                self.column_qualifier,
+                self.qualifier,
                 self.value,
                 self.timestamp_micros,
                 tuple(self.labels),

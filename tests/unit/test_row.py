@@ -76,7 +76,7 @@ class TestRow(unittest.TestCase):
             output = row_response.get_cells(family="1", qualifier=q)
             self.assertEqual(len(output), 1)
             self.assertEqual(output[0].family, "1")
-            self.assertEqual(output[0].column_qualifier, b"a")
+            self.assertEqual(output[0].qualifier, b"a")
             self.assertEqual(output[0], cell_list[0])
         # calling with just qualifier should raise an error
         with self.assertRaises(ValueError):
@@ -483,7 +483,7 @@ class TestCell(unittest.TestCase):
         self.assertEqual(cell.value, TEST_VALUE)
         self.assertEqual(cell.row_key, TEST_ROW_KEY)
         self.assertEqual(cell.family, TEST_FAMILY_ID)
-        self.assertEqual(cell.column_qualifier, TEST_QUALIFIER)
+        self.assertEqual(cell.qualifier, TEST_QUALIFIER)
         self.assertEqual(cell.timestamp_micros, TEST_TIMESTAMP)
         self.assertEqual(cell.labels, TEST_LABELS)
 
@@ -583,8 +583,8 @@ class TestCell(unittest.TestCase):
 
         cell = self._make_one()
         expected = (
-            "Cell(value=b'1234', row=b'row', "
-            + "family='cf1', column_qualifier=b'col', "
+            "Cell(value=b'1234', row_key=b'row', "
+            + "family='cf1', qualifier=b'col', "
             + f"timestamp_micros={TEST_TIMESTAMP}, labels=['label1', 'label2'])"
         )
         self.assertEqual(repr(cell), expected)
@@ -604,8 +604,8 @@ class TestCell(unittest.TestCase):
             None,
         )
         expected = (
-            "Cell(value=b'1234', row=b'row', "
-            + "family='cf1', column_qualifier=b'col', "
+            "Cell(value=b'1234', row_key=b'row', "
+            + "family='cf1', qualifier=b'col', "
             + f"timestamp_micros={TEST_TIMESTAMP}, labels=[])"
         )
         self.assertEqual(repr(cell_no_labels), expected)

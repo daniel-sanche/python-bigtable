@@ -8,7 +8,7 @@ from google.cloud.bigtable._read_rows import AWAITING_NEW_CELL
 from google.cloud.bigtable._read_rows import AWAITING_CELL_VALUE
 
 TEST_FAMILY = "family_name"
-TEST_QUALIFIER = b"column_qualifier"
+TEST_QUALIFIER = b"qualifier"
 TEST_TIMESTAMP = 123456789
 TEST_LABELS = ["label1", "label2"]
 
@@ -596,7 +596,7 @@ class TestStateMachine(unittest.TestCase):
             assert isinstance(output, Row)
             assert output.row_key == b"row_key"
             assert output[0].family == "f"
-            assert output[0].column_qualifier == b"q"
+            assert output[0].qualifier == b"q"
             assert instance.last_seen_row_key == b"row_key"
         assert mock_reset.call_count == 1
 
@@ -613,7 +613,7 @@ class TestStateMachine(unittest.TestCase):
             assert isinstance(output, Row)
             assert output.row_key == b"row_key"
             assert output[0].family == ""
-            assert output[0].column_qualifier == b""
+            assert output[0].qualifier == b""
             assert instance.last_seen_row_key == b"row_key"
         assert mock_reset.call_count == 1
 
@@ -910,7 +910,7 @@ class TestRowBuilder(unittest.TestCase):
         row_builder.start_row(b"row_key")
         row_builder.start_cell(TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_LABELS)
         self.assertEqual(row_builder.working_cell.family, TEST_FAMILY)
-        self.assertEqual(row_builder.working_cell.column_qualifier, TEST_QUALIFIER)
+        self.assertEqual(row_builder.working_cell.qualifier, TEST_QUALIFIER)
         self.assertEqual(row_builder.working_cell.timestamp_micros, TEST_TIMESTAMP)
         self.assertEqual(row_builder.working_cell.labels, TEST_LABELS)
         self.assertEqual(row_builder.working_value, b"")
@@ -935,9 +935,7 @@ class TestRowBuilder(unittest.TestCase):
         row_builder.finish_cell()
         self.assertEqual(len(row_builder.completed_cells), 1)
         self.assertEqual(row_builder.completed_cells[0].family, TEST_FAMILY)
-        self.assertEqual(
-            row_builder.completed_cells[0].column_qualifier, TEST_QUALIFIER
-        )
+        self.assertEqual(row_builder.completed_cells[0].qualifier, TEST_QUALIFIER)
         self.assertEqual(
             row_builder.completed_cells[0].timestamp_micros, TEST_TIMESTAMP
         )
@@ -952,9 +950,7 @@ class TestRowBuilder(unittest.TestCase):
         row_builder.finish_cell()
         self.assertEqual(len(row_builder.completed_cells), 2)
         self.assertEqual(row_builder.completed_cells[1].family, TEST_FAMILY)
-        self.assertEqual(
-            row_builder.completed_cells[1].column_qualifier, TEST_QUALIFIER
-        )
+        self.assertEqual(row_builder.completed_cells[1].qualifier, TEST_QUALIFIER)
         self.assertEqual(
             row_builder.completed_cells[1].timestamp_micros, TEST_TIMESTAMP
         )
@@ -992,7 +988,7 @@ class TestRowBuilder(unittest.TestCase):
         self.assertEqual(len(output), 3)
         for i in range(3):
             self.assertEqual(output[i].family, str(i))
-            self.assertEqual(output[i].column_qualifier, TEST_QUALIFIER)
+            self.assertEqual(output[i].qualifier, TEST_QUALIFIER)
             self.assertEqual(output[i].timestamp_micros, TEST_TIMESTAMP)
             self.assertEqual(output[i].labels, TEST_LABELS)
             self.assertEqual(output[i].value, b"cell_value: " + str(i).encode("utf-8"))
