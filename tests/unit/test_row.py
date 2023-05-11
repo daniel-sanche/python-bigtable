@@ -179,7 +179,6 @@ class TestRow(unittest.TestCase):
         self.assertEqual(column.cells[1].labels, TEST_LABELS)
 
     def test_iteration(self):
-        from types import GeneratorType
         from google.cloud.bigtable.row import Cell
 
         # should be able to iterate over the Row as a list
@@ -188,8 +187,6 @@ class TestRow(unittest.TestCase):
         cell3 = self._make_cell(value=b"3")
         row_response = self._make_one(TEST_ROW_KEY, [cell1, cell2, cell3])
         self.assertEqual(len(row_response), 3)
-        # should create generator object
-        self.assertIsInstance(iter(row_response), GeneratorType)
         result_list = list(row_response)
         self.assertEqual(len(result_list), 3)
         # should be able to iterate over all cells

@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Sequence, Generator, overload, Any
+from typing import Sequence, Generator, overload, Any, Set
 from functools import total_ordering
 
 # Type aliases used internally for readability.
@@ -36,6 +36,7 @@ class Row(Sequence["Cell"]):
     Can be indexed:
     cells = row["family", "qualifier"]
     """
+    __slots__ = ("row_key", "_cells_list", "_index_data")
 
     def __init__(
         self,
@@ -49,16 +50,22 @@ class Row(Sequence["Cell"]):
         They are returned by the Bigtable backend.
         """
         self.row_key = key
-        self._cells_map: dict[family_id, dict[qualifier, list[Cell]]] = OrderedDict()
-        self._cells_list: list[Cell] = []
-        # add cells to internal stores using Bigtable native ordering
-        for cell in cells:
-            if cell.family not in self._cells_map:
-                self._cells_map[cell.family] = OrderedDict()
-            if cell.column_qualifier not in self._cells_map[cell.family]:
-                self._cells_map[cell.family][cell.column_qualifier] = []
-            self._cells_map[cell.family][cell.column_qualifier].append(cell)
-            self._cells_list.append(cell)
+        self._cells_list: list[Cell] = cells
+        # index is lazily created when needed
+        self._index_data: OrderedDict[family_id, OrderedDict[qualifier, list[Cell]]] | None = None
+
+    @property
+    def _index(self) -> OrderedDict[family_id, OrderedDict[qualifier, list[Cell]]]:
+        """
+        Returns an index of cells associated with each family and qualifier.
+
+        The index is lazily created when needed
+        """
+        if self._index_data is None:
+            self._index_data = OrderedDict()
+            for cell in self._cells_list:
+                self._index_data.setdefault(cell.family, OrderedDict()).setdefault(cell.column_qualifier, []).append(cell)
+        return self._index_data
 
     @property
     def cells(self) -> list[Cell]:
@@ -95,24 +102,22 @@ class Row(Sequence["Cell"]):
         if isinstance(qualifier, str):
             qualifier = qualifier.encode("utf-8")
         # return cells in family and qualifier on get_cells(family, qualifier)
-        if family not in self._cells_map:
+        if family not in self._index:
             raise ValueError(f"Family '{family}' not found in row '{self.row_key!r}'")
-        if qualifier not in self._cells_map[family]:
+        if qualifier not in self._index[family]:
             raise ValueError(
                 f"Qualifier '{qualifier!r}' not found in family '{family}' in row '{self.row_key!r}'"
             )
-        return self._cells_map[family][qualifier]
+        return self._index[family][qualifier]
 
     def _get_all_from_family(self, family: family_id) -> Generator[Cell, None, None]:
         """
         Returns all cells in the row for the family_id
         """
-        if family not in self._cells_map:
+        if family not in self._index:
             raise ValueError(f"Family '{family}' not found in row '{self.row_key!r}'")
-        qualifier_dict = self._cells_map.get(family, {})
-        for cell_batch in qualifier_dict.values():
-            for cell in cell_batch:
-                yield cell
+        for qualifier in self._index[family]:
+            yield from self._index[family][qualifier]
 
     def __str__(self) -> str:
         """
@@ -155,25 +160,21 @@ class Row(Sequence["Cell"]):
 
         https://cloud.google.com/bigtable/docs/reference/data/rpc/google.bigtable.v2#row
         """
-        families_list: list[dict[str, Any]] = []
-        for family in self._cells_map:
-            column_list: list[dict[str, Any]] = []
-            for qualifier in self._cells_map[family]:
-                cells_list: list[dict[str, Any]] = []
-                for cell in self._cells_map[family][qualifier]:
-                    cells_list.append(cell.to_dict())
-                column_list.append({"qualifier": qualifier, "cells": cells_list})
-            families_list.append({"name": family, "columns": column_list})
-        return {"key": self.row_key, "families": families_list}
+        family_list = []
+        for family_name, qualifier_dict in self._index.items():
+            qualifier_list = []
+            for qualifier_name, cell_list in qualifier_dict.items():
+                cell_dicts = [cell.to_dict() for cell in cell_list]
+                qualifier_list.append({"qualifier": qualifier_name, "cells": cell_dicts})
+            family_list.append({"name": family_name, "columns": qualifier_list})
+        return {"key": self.row_key, "families": family_list}
 
     # Sequence and Mapping methods
     def __iter__(self):
         """
         Allow iterating over all cells in the row
         """
-        # iterate as a sequence; yield all cells
-        for cell in self._cells_list:
-            yield cell
+        return iter(self._cells_list)
 
     def __contains__(self, item):
         """
@@ -183,16 +184,14 @@ class Row(Sequence["Cell"]):
         `(family, qualifier)` pairs associated with the cells
         """
         if isinstance(item, family_id):
-            # check if family key is in Row
-            return item in self._cells_map
+            return item in self._index
         elif (
             isinstance(item, tuple)
             and isinstance(item[0], family_id)
             and isinstance(item[1], (qualifier, str))
         ):
-            # check if (family, qualifier) pair is in Row
-            qualifer = item[1] if isinstance(item[1], bytes) else item[1].encode()
-            return item[0] in self._cells_map and qualifer in self._cells_map[item[0]]
+            q = item[1] if isinstance(item[1], bytes) else item[1].encode("utf-8")
+            return item[0] in self._index and q in self._index[item[0]]
         # check if Cell is in Row
         return item in self._cells_list
 
@@ -243,17 +242,13 @@ class Row(Sequence["Cell"]):
         """
         return len(self._cells_list)
 
-    def get_column_components(self):
+    def get_column_components(self) -> list[tuple[family_id, qualifier]]:
         """
         Returns a list of (family, qualifier) pairs associated with the cells
 
         Pairs can be used for indexing
         """
-        key_list = []
-        for family in self._cells_map:
-            for qualifier in self._cells_map[family]:
-                key_list.append((family, qualifier))
-        return key_list
+        return [(f, q) for f in self._index for q in self._index[f]]
 
     def __eq__(self, other):
         """
@@ -312,6 +307,8 @@ class Cell:
     query.
     Expected to be read-only to users, and written by backend
     """
+
+    __slots__ = ("value", "row_key", "family", "column_qualifier", "timestamp_micros", "labels")
 
     def __init__(
         self,
