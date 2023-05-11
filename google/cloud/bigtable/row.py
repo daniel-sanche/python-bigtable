@@ -36,7 +36,7 @@ class Row(Sequence["Cell"]):
     Can be indexed:
     cells = row["family", "qualifier"]
     """
-    __slots__ = ("row_key", "_cells_list", "_index_data")
+    __slots__ = ("row_key", "cells", "_index_data")
 
     def __init__(
         self,
@@ -50,7 +50,7 @@ class Row(Sequence["Cell"]):
         They are returned by the Bigtable backend.
         """
         self.row_key = key
-        self._cells_list: list[Cell] = cells
+        self.cells: list[Cell] = cells
         # index is lazily created when needed
         self._index_data: OrderedDict[family_id, OrderedDict[qualifier, list[Cell]]] | None = None
 
@@ -63,16 +63,9 @@ class Row(Sequence["Cell"]):
         """
         if self._index_data is None:
             self._index_data = OrderedDict()
-            for cell in self._cells_list:
+            for cell in self.cells:
                 self._index_data.setdefault(cell.family, OrderedDict()).setdefault(cell.column_qualifier, []).append(cell)
         return self._index_data
-
-    @property
-    def cells(self) -> list[Cell]:
-        """
-        Returns a list of all cells in the row
-        """
-        return self.get_cells()
 
     def get_cells(
         self, family: str | None = None, qualifier: str | bytes | None = None
@@ -95,7 +88,7 @@ class Row(Sequence["Cell"]):
                 raise ValueError("Qualifier passed without family")
             else:
                 # return all cells on get_cells()
-                return self._cells_list
+                return self.cells
         if qualifier is None:
             # return all cells in family on get_cells(family)
             return list(self._get_all_from_family(family))
@@ -174,7 +167,7 @@ class Row(Sequence["Cell"]):
         """
         Allow iterating over all cells in the row
         """
-        return iter(self._cells_list)
+        return iter(self.cells)
 
     def __contains__(self, item):
         """
@@ -193,7 +186,7 @@ class Row(Sequence["Cell"]):
             q = item[1] if isinstance(item[1], bytes) else item[1].encode("utf-8")
             return item[0] in self._index and q in self._index[item[0]]
         # check if Cell is in Row
-        return item in self._cells_list
+        return item in self.cells
 
     @overload
     def __getitem__(
@@ -230,7 +223,7 @@ class Row(Sequence["Cell"]):
             return self.get_cells(family=index[0], qualifier=index[1])
         elif isinstance(index, int) or isinstance(index, slice):
             # index is int or slice
-            return self._cells_list[index]
+            return self.cells[index]
         else:
             raise TypeError(
                 "Index must be family_id, (family_id, qualifier), int, or slice"
@@ -240,7 +233,7 @@ class Row(Sequence["Cell"]):
         """
         Implements `len()` operator
         """
-        return len(self._cells_list)
+        return len(self.cells)
 
     def get_column_components(self) -> list[tuple[family_id, qualifier]]:
         """
@@ -260,7 +253,7 @@ class Row(Sequence["Cell"]):
             return False
         if self.row_key != other.row_key:
             return False
-        if len(self._cells_list) != len(other._cells_list):
+        if len(self.cells) != len(other.cells):
             return False
         components = self.get_column_components()
         other_components = other.get_column_components()
@@ -272,7 +265,7 @@ class Row(Sequence["Cell"]):
             if len(self[family, qualifier]) != len(other[family, qualifier]):
                 return False
         # compare individual cell lists
-        if self._cells_list != other._cells_list:
+        if self.cells != other.cells:
             return False
         return True
 
