@@ -514,11 +514,13 @@ class AWAITING_NEW_CELL(_State):
     def handle_chunk(self, chunk: ReadRowsResponse.CellChunk) -> "_State":
         is_split = chunk.value_size > 0
         # track latest cell data. New chunks won't send repeated data
-        if _chunk_has_field(chunk, "family_name"):
+        has_family = _chunk_has_field(chunk, "family_name")
+        has_qualifier = _chunk_has_field(chunk, "qualifier")
+        if has_family:
             self._owner.current_family = chunk.family_name.value
-            if not _chunk_has_field(chunk, "qualifier"):
+            if not has_qualifier:
                 raise InvalidChunk("New family must specify qualifier")
-        if _chunk_has_field(chunk, "qualifier"):
+        if has_qualifier:
             self._owner.current_qualifier = chunk.qualifier.value
             if self._owner.current_family is None:
                 raise InvalidChunk("Family not found")
