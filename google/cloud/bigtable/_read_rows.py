@@ -228,10 +228,8 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             # run until we get a timeout or the stream is exhausted
             while True:
                 new_item = await stream.__anext__()
-                if isinstance(new_item, RequestStats):
-                    yield new_item
                 # ignore rows that have already been emitted
-                elif isinstance(new_item, Row) and (
+                if isinstance(new_item, Row) and (
                     self._last_seen_row_key is None
                     or new_item.row_key > self._last_seen_row_key
                 ):
@@ -243,6 +241,8 @@ class _ReadRowsOperation(AsyncIterable[Row]):
                         self._emit_count += 1
                         if total_row_limit and self._emit_count >= total_row_limit:
                             return
+                elif isinstance(new_item, RequestStats):
+                    yield new_item
         except StopAsyncIteration:
             # end of stream
             return
