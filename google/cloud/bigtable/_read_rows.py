@@ -72,7 +72,6 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         *,
         buffer_size: int = 0,
         operation_timeout: float | None = None,
-        per_row_timeout: float | None = None,
         per_request_timeout: float | None = None,
     ):
         """
@@ -81,7 +80,6 @@ class _ReadRowsOperation(AsyncIterable[Row]):
           - client: the Bigtable client to use to make the request
           - buffer_size: the size of the buffer to use for caching rows from the network
           - operation_timeout: the timeout to use for the entire operation, in seconds
-          - per_row_timeout: the timeout to use when waiting for each individual row, in seconds
           - per_request_timeout: the timeout to use when waiting for each individual grpc request, in seconds
         """
         self._last_seen_row_key: bytes | None = None
@@ -95,7 +93,6 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             self._read_rows_retryable_attempt,
             client.read_rows,
             buffer_size,
-            per_row_timeout,
             per_request_timeout,
             row_limit,
         )
@@ -177,7 +174,6 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         self,
         gapic_fn: Callable[..., Awaitable[AsyncIterable[ReadRowsResponse]]],
         buffer_size: int,
-        per_row_timeout: float | None,
         per_request_timeout: float | None,
         total_row_limit: int,
     ) -> AsyncGenerator[Row | RequestStats, None]:
@@ -231,9 +227,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             )
             # run until we get a timeout or the stream is exhausted
             while True:
-                new_item = await asyncio.wait_for(
-                    stream.__anext__(), timeout=per_row_timeout
-                )
+                new_item = await stream.__anext__()
                 if isinstance(new_item, RequestStats):
                     yield new_item
                 # ignore rows that have already been emitted
@@ -249,11 +243,6 @@ class _ReadRowsOperation(AsyncIterable[Row]):
                         self._emit_count += 1
                         if total_row_limit and self._emit_count >= total_row_limit:
                             return
-        except asyncio.TimeoutError:
-            # per_row_timeout from asyncio.wait_for
-            raise core_exceptions.DeadlineExceeded(
-                f"per_row_timeout of {per_row_timeout:0.1f}s exceeded"
-            )
         except StopAsyncIteration:
             # end of stream
             return
