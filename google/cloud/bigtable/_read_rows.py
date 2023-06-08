@@ -26,6 +26,7 @@ from typing import (
     Type,
 )
 
+import time
 import asyncio
 from functools import partial
 from grpc.aio import RpcContext
@@ -39,6 +40,7 @@ from google.api_core import retry_async as retries
 from google.api_core import exceptions as core_exceptions
 from google.cloud.bigtable._helpers import _make_metadata
 from google.cloud.bigtable._helpers import _attempt_timeout_generator
+from google.cloud.bigtable.metrics import BigtableClientSideMetrics
 
 """
 This module provides a set of classes for merging ReadRowsResponse chunks
@@ -74,6 +76,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         request: dict[str, Any],
         client: BigtableAsyncClient,
         *,
+        metrics: BigtableClientSideMetrics | None = None,
         operation_timeout: float = 600.0,
         per_request_timeout: float | None = None,
     ):
@@ -85,6 +88,16 @@ class _ReadRowsOperation(AsyncIterable[Row]):
           - per_request_timeout: the timeout to use when waiting for each individual grpc request, in seconds
                 If not specified, defaults to operation_timeout
         """
+        self._first_row_latency: float | None = None
+        if metrics:
+            operation_id = metrics.record_operation_start("read_rows")
+            self._metrics_on_attempt_start = partial(metrics.record_attempt_start, operation_id)
+            self._metrics_on_attempt_end = partial(metrics.record_attempt_end, operation_id)
+            self._metrics_on_operation_end = partial(metrics.record_operation_end, operation_id)
+            self._metrics_on_first_row_latency = partial(metrics.record_read_rows_first_row_latency)
+        else:
+            self._metrics_on_attempt_start, self._metrics_on_attempt_end, self._metrics_on_operation_end, self._metrics_on_first_row_latency = [lambda *args: None] * 4
+
         self._last_emitted_row_key: bytes | None = None
         self._emit_count = 0
         self._request = request
@@ -108,8 +121,14 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         )
 
         def on_error_fn(exc):
+            # record attempt complete
+            self._metrics_on_attempt_end(exc.grpc_status_code)
+            # attach errors to list
             if predicate(exc):
                 self.transient_errors.append(exc)
+            else:
+                # record operation complete with error
+                self._metrics_on_operation_end(exc.grpc_status_code)
 
         retry = retries.AsyncRetry(
             predicate=predicate,
@@ -133,7 +152,13 @@ class _ReadRowsOperation(AsyncIterable[Row]):
     async def __anext__(self) -> Row:
         """Implements the AsyncIterator interface"""
         if self._stream is not None:
-            return await self._stream.__anext__()
+            # record first request latency if metrics are enabled
+            start_time = time.monotonic() if self._first_row_latency is None else None
+            next_item = await self._stream.__anext__()
+            if start_time and self._first_row_latency is None:
+                self.first_row_latency = time.monotonic() - start_time
+                self._metrics_on_first_request_latency(self.first_row_latency)
+            return next_item
         else:
             raise asyncio.InvalidStateError("stream is closed")
 
@@ -194,6 +219,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             metadata=metadata,
         )
         try:
+            self._metrics_on_attempt_start()
             state_machine = _StateMachine()
             stream = _ReadRowsOperation.merge_row_response_stream(
                 new_gapic_stream, state_machine
@@ -217,6 +243,8 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             # ensure grpc stream is closed
             new_gapic_stream.cancel()
             raise exc
+        # operation finished successfully
+        self._metrics_on_operation_end(0)
 
     @staticmethod
     def _revise_request_rowset(

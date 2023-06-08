@@ -54,6 +54,7 @@ from google.cloud.bigtable.mutations import Mutation, RowMutationEntry
 from google.cloud.bigtable._mutate_rows import _MutateRowsOperation
 from google.cloud.bigtable._helpers import _make_metadata
 from google.cloud.bigtable._helpers import _convert_retry_deadline
+from google.cloud.bigtable.metrics import BigtableClientSideMetrics
 
 if TYPE_CHECKING:
     from google.cloud.bigtable.mutations_batcher import MutationsBatcher
@@ -394,6 +395,7 @@ class Table:
 
         self.default_operation_timeout = default_operation_timeout
         self.default_per_request_timeout = default_per_request_timeout
+        self.metrics = BigtableClientSideMetrics(client.project, instance_id, app_profile_id)
 
         # raises RuntimeError if called outside of an async context (no running event loop)
         try:
@@ -466,6 +468,7 @@ class Table:
             self.client._gapic_client,
             operation_timeout=operation_timeout,
             per_request_timeout=per_request_timeout,
+            metrics=self.metrics,
         )
         output_generator = ReadRowsIterator(row_merger)
         # add idle timeout to clear resources if generator is abandoned
