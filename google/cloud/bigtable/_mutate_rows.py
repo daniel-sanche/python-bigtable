@@ -14,7 +14,7 @@
 #
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Sequence, Type, TYPE_CHECKING
 import functools
 
 from google.api_core import exceptions as core_exceptions
@@ -58,6 +58,10 @@ class _MutateRowsOperation:
         mutation_entries: list["RowMutationEntry"],
         operation_timeout: float,
         per_request_timeout: float | None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+        ),
     ):
         """
         Args:
@@ -78,11 +82,10 @@ class _MutateRowsOperation:
         )
         # create predicate for determining which errors are retryable
         self.is_retryable = retries.if_exception_type(
-            # RPC level errors
-            core_exceptions.DeadlineExceeded,
-            core_exceptions.ServiceUnavailable,
             # Entry level errors
             _MutateRowsIncomplete,
+            # RPC level errors
+            *retryable_exceptions,
         )
         # build retryable operation
         retry = retries.AsyncRetry(

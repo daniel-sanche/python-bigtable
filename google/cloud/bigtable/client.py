@@ -20,8 +20,8 @@ from typing import (
     Any,
     Optional,
     Set,
-    Callable,
-    Coroutine,
+    Sequence,
+    Type,
     TYPE_CHECKING,
 )
 
@@ -427,6 +427,11 @@ class Table:
         *,
         operation_timeout: float | None = None,
         per_request_timeout: float | None = None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+            core_exceptions.Aborted,
+        ),
     ) -> ReadRowsIterator:
         """
         Returns an iterator to asynchronously stream back row data.
@@ -482,6 +487,7 @@ class Table:
             self.client._gapic_client,
             operation_timeout=operation_timeout,
             per_request_timeout=per_request_timeout,
+            retryable_exceptions=retryable_exceptions,
         )
         output_generator = ReadRowsIterator(row_merger)
         # add idle timeout to clear resources if generator is abandoned
@@ -495,6 +501,11 @@ class Table:
         *,
         operation_timeout: float | None = None,
         per_request_timeout: float | None = None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+            core_exceptions.Aborted,
+        ),
     ) -> list[Row]:
         """
         Helper function that returns a full list instead of a generator
@@ -508,6 +519,7 @@ class Table:
             query,
             operation_timeout=operation_timeout,
             per_request_timeout=per_request_timeout,
+            retryable_exceptions=retryable_exceptions,
         )
         results = [row async for row in row_generator]
         return results
@@ -519,6 +531,11 @@ class Table:
         row_filter: RowFilter | None = None,
         operation_timeout: int | float | None = 60,
         per_request_timeout: int | float | None = None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+            core_exceptions.Aborted,
+        ),
     ) -> Row | None:
         """
         Helper function to return a single row
@@ -537,6 +554,7 @@ class Table:
             query,
             operation_timeout=operation_timeout,
             per_request_timeout=per_request_timeout,
+            retryable_exceptions=retryable_exceptions,
         )
         if len(results) == 0:
             return None
@@ -548,6 +566,11 @@ class Table:
         *,
         operation_timeout: int | float | None = None,
         per_request_timeout: int | float | None = None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+            core_exceptions.Aborted,
+        ),
     ) -> list[Row]:
         """
         Runs a sharded query in parallel, then return the results in a single list.
@@ -575,6 +598,7 @@ class Table:
                 query,
                 operation_timeout=operation_timeout,
                 per_request_timeout=per_request_timeout,
+                retryable_exceptions=retryable_exceptions,
             )
             for query in query_list
         ]
@@ -606,6 +630,11 @@ class Table:
         *,
         operation_timeout: int | float | None = 60,
         per_request_timeout: int | float | None = None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+            core_exceptions.Aborted,
+        ),
     ) -> bool:
         """
         Helper function to determine if a row exists
@@ -625,6 +654,7 @@ class Table:
             query,
             operation_timeout=operation_timeout,
             per_request_timeout=per_request_timeout,
+            retryable_exceptions=retryable_exceptions,
         )
         return len(results) > 0
 
@@ -633,6 +663,10 @@ class Table:
         *,
         operation_timeout: float | None = None,
         per_request_timeout: float | None = None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+        ),
     ) -> RowKeySamples:
         """
         Return a set of RowKeySamples that delimit contiguous sections of the table of
@@ -666,10 +700,7 @@ class Table:
             per_request_timeout, operation_timeout
         )
         # prepare retryable
-        predicate = retries.if_exception_type(
-            core_exceptions.DeadlineExceeded,
-            core_exceptions.ServiceUnavailable,
-        )
+        predicate = retries.if_exception_type(*retryable_exceptions)
         transient_errors = []
 
         def on_error_fn(exc):
@@ -723,6 +754,10 @@ class Table:
         *,
         operation_timeout: float | None = 60,
         per_request_timeout: float | None = None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+        ),
     ):
         """
          Mutates a row atomically.
@@ -774,10 +809,7 @@ class Table:
 
         if all(mutation.is_idempotent() for mutation in mutations):
             # mutations are all idempotent and safe to retry
-            predicate = retries.if_exception_type(
-                core_exceptions.DeadlineExceeded,
-                core_exceptions.ServiceUnavailable,
-            )
+            predicate = retries.if_exception_type(*retryable_exceptions)
         else:
             # mutations should not be retried
             predicate = retries.if_exception_type()
@@ -812,10 +844,10 @@ class Table:
         *,
         operation_timeout: float | None = 60,
         per_request_timeout: float | None = None,
-        on_success: Callable[
-            [int, RowMutationEntry], None | Coroutine[None, None, None]
-        ]
-        | None = None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+        ),
     ):
         """
         Applies mutations for multiple rows in a single batched request.
@@ -864,6 +896,7 @@ class Table:
             mutation_entries,
             operation_timeout,
             per_request_timeout,
+            retryable_exceptions=retryable_exceptions,
         )
         await operation.start()
 

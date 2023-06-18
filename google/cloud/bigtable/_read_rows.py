@@ -23,6 +23,7 @@ from typing import (
     Iterator,
     Callable,
     Awaitable,
+    Sequence,
     Type,
 )
 
@@ -76,6 +77,11 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         *,
         operation_timeout: float = 600.0,
         per_request_timeout: float | None = None,
+        retryable_exceptions: Sequence[Type[Exception]] = (
+            core_exceptions.DeadlineExceeded,
+            core_exceptions.ServiceUnavailable,
+            core_exceptions.Aborted,
+        ),
     ):
         """
         Args:
@@ -101,11 +107,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             attempt_timeout_gen,
             row_limit,
         )
-        predicate = retries.if_exception_type(
-            core_exceptions.DeadlineExceeded,
-            core_exceptions.ServiceUnavailable,
-            core_exceptions.Aborted,
-        )
+        predicate = retries.if_exception_type(*retryable_exceptions)
 
         def on_error_fn(exc):
             if predicate(exc):
