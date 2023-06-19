@@ -792,7 +792,7 @@ class TestTable:
         expected_instance_id = "instance-id"
         expected_app_profile_id = "app-profile-id"
         expected_operation_timeout = 123
-        expected_per_request_timeout = 12
+        expected_attempt_timeout = 12
         client = BigtableDataClient()
         assert not client._active_instances
 
@@ -802,7 +802,7 @@ class TestTable:
             expected_table_id,
             expected_app_profile_id,
             default_operation_timeout=expected_operation_timeout,
-            default_per_request_timeout=expected_per_request_timeout,
+            default_attempt_timeout=expected_attempt_timeout,
         )
         await asyncio.sleep(0)
         assert table.table_id == expected_table_id
@@ -811,7 +811,7 @@ class TestTable:
         assert table.client is client
         assert table.instance_name in client._active_instances
         assert table.default_operation_timeout == expected_operation_timeout
-        assert table.default_per_request_timeout == expected_per_request_timeout
+        assert table.default_attempt_timeout == expected_attempt_timeout
         # ensure task reaches completion
         await table._register_instance_task
         assert table._register_instance_task.done()
@@ -827,8 +827,8 @@ class TestTable:
         client = BigtableDataClient()
 
         with pytest.raises(ValueError) as e:
-            Table(client, "", "", default_per_request_timeout=-1)
-        assert "default_per_request_timeout must be greater than 0" in str(e.value)
+            Table(client, "", "", default_attempt_timeout=-1)
+        assert "default_attempt_timeout must be greater than 0" in str(e.value)
         with pytest.raises(ValueError) as e:
             Table(client, "", "", default_operation_timeout=-1)
         assert "default_operation_timeout must be greater than 0" in str(e.value)
@@ -838,10 +838,10 @@ class TestTable:
                 "",
                 "",
                 default_operation_timeout=1,
-                default_per_request_timeout=2,
+                default_attempt_timeout=2,
             )
         assert (
-            "default_per_request_timeout must be less than default_operation_timeout"
+            "default_attempt_timeout must be less than default_operation_timeout"
             in str(e.value)
         )
         await client.close()
@@ -1048,15 +1048,15 @@ class TestReadRows:
         ],
     )
     @pytest.mark.asyncio
-    async def test_read_rows_per_request_timeout(
+    async def test_read_rows_attempt_timeout(
         self, per_request_t, operation_t, expected_num
     ):
         """
-        Ensures that the per_request_timeout is respected and that the number of
+        Ensures that the attempt_timeout is respected and that the number of
         requests is as expected.
 
         operation_timeout does not cancel the request, so we expect the number of
-        requests to be the ceiling of operation_timeout / per_request_timeout.
+        requests to be the ceiling of operation_timeout / attempt_timeout.
         """
         from google.cloud.bigtable.exceptions import RetryExceptionGroup
 
@@ -1081,7 +1081,7 @@ class TestReadRows:
                                 table,
                                 query,
                                 operation_timeout=operation_t,
-                                per_request_timeout=per_request_t,
+                                attempt_timeout=per_request_t,
                             )
                         except core_exceptions.DeadlineExceeded as e:
                             retry_exc = e.__cause__
@@ -1270,7 +1270,7 @@ class TestReadRows:
         from google.cloud.bigtable._read_rows import _ReadRowsOperation
 
         operation_timeout = 8
-        per_request_timeout = 4
+        attempt_timeout = 4
         with mock.patch.object(_ReadRowsOperation, "__init__") as mock_op:
             mock_op.side_effect = RuntimeError("mock error")
             async with self._make_client() as client:
@@ -1278,7 +1278,7 @@ class TestReadRows:
                     "instance",
                     "table",
                     default_operation_timeout=operation_timeout,
-                    default_per_request_timeout=per_request_timeout,
+                    default_attempt_timeout=attempt_timeout,
                 ) as table:
                     try:
                         await self.execute_fn(table, ReadRowsQuery())
@@ -1286,7 +1286,7 @@ class TestReadRows:
                         pass
                     kwargs = mock_op.call_args_list[0].kwargs
                     assert kwargs["operation_timeout"] == operation_timeout
-                    assert kwargs["per_request_timeout"] == per_request_timeout
+                    assert kwargs["attempt_timeout"] == attempt_timeout
 
     @pytest.mark.asyncio
     async def test_read_rows_default_timeout_override(self):
@@ -1296,7 +1296,7 @@ class TestReadRows:
         from google.cloud.bigtable._read_rows import _ReadRowsOperation
 
         operation_timeout = 8
-        per_request_timeout = 4
+        attempt_timeout = 4
         with mock.patch.object(_ReadRowsOperation, "__init__") as mock_op:
             mock_op.side_effect = RuntimeError("mock error")
             async with self._make_client() as client:
@@ -1304,20 +1304,20 @@ class TestReadRows:
                     "instance",
                     "table",
                     default_operation_timeout=99,
-                    default_per_request_timeout=97,
+                    default_attempt_timeout=97,
                 ) as table:
                     try:
                         await self.execute_fn(
                             table,
                             ReadRowsQuery(),
                             operation_timeout=operation_timeout,
-                            per_request_timeout=per_request_timeout,
+                            attempt_timeout=attempt_timeout,
                         )
                     except RuntimeError:
                         pass
                     kwargs = mock_op.call_args_list[0].kwargs
                     assert kwargs["operation_timeout"] == operation_timeout
-                    assert kwargs["per_request_timeout"] == per_request_timeout
+                    assert kwargs["attempt_timeout"] == attempt_timeout
 
     @pytest.mark.asyncio
     async def test_read_row(self):
@@ -1333,13 +1333,13 @@ class TestReadRows:
                 row = await table.read_row(
                     row_key,
                     operation_timeout=expected_op_timeout,
-                    per_request_timeout=expected_req_timeout,
+                    attempt_timeout=expected_req_timeout,
                 )
                 assert row == expected_result
                 assert read_rows.call_count == 1
                 args, kwargs = read_rows.call_args_list[0]
                 assert kwargs["operation_timeout"] == expected_op_timeout
-                assert kwargs["per_request_timeout"] == expected_req_timeout
+                assert kwargs["attempt_timeout"] == expected_req_timeout
                 assert len(args) == 1
                 assert isinstance(args[0], ReadRowsQuery)
                 assert args[0]._to_dict() == {
@@ -1364,14 +1364,14 @@ class TestReadRows:
                 row = await table.read_row(
                     row_key,
                     operation_timeout=expected_op_timeout,
-                    per_request_timeout=expected_req_timeout,
+                    attempt_timeout=expected_req_timeout,
                     row_filter=expected_filter,
                 )
                 assert row == expected_result
                 assert read_rows.call_count == 1
                 args, kwargs = read_rows.call_args_list[0]
                 assert kwargs["operation_timeout"] == expected_op_timeout
-                assert kwargs["per_request_timeout"] == expected_req_timeout
+                assert kwargs["attempt_timeout"] == expected_req_timeout
                 assert len(args) == 1
                 assert isinstance(args[0], ReadRowsQuery)
                 assert args[0]._to_dict() == {
@@ -1394,13 +1394,13 @@ class TestReadRows:
                 result = await table.read_row(
                     row_key,
                     operation_timeout=expected_op_timeout,
-                    per_request_timeout=expected_req_timeout,
+                    attempt_timeout=expected_req_timeout,
                 )
                 assert result is None
                 assert read_rows.call_count == 1
                 args, kwargs = read_rows.call_args_list[0]
                 assert kwargs["operation_timeout"] == expected_op_timeout
-                assert kwargs["per_request_timeout"] == expected_req_timeout
+                assert kwargs["attempt_timeout"] == expected_req_timeout
                 assert isinstance(args[0], ReadRowsQuery)
                 assert args[0]._to_dict() == {
                     "rows": {"row_keys": [row_key], "row_ranges": []},
@@ -1439,13 +1439,13 @@ class TestReadRows:
                 result = await table.row_exists(
                     row_key,
                     operation_timeout=expected_op_timeout,
-                    per_request_timeout=expected_req_timeout,
+                    attempt_timeout=expected_req_timeout,
                 )
                 assert expected_result == result
                 assert read_rows.call_count == 1
                 args, kwargs = read_rows.call_args_list[0]
                 assert kwargs["operation_timeout"] == expected_op_timeout
-                assert kwargs["per_request_timeout"] == expected_req_timeout
+                assert kwargs["attempt_timeout"] == expected_req_timeout
                 assert isinstance(args[0], ReadRowsQuery)
                 expected_filter = {
                     "chain": {
@@ -1693,14 +1693,14 @@ class TestSampleRowKeys:
                     await table.sample_row_keys(operation_timeout=-1)
                     assert "operation_timeout must be greater than 0" in str(e.value)
                 with pytest.raises(ValueError) as e:
-                    await table.sample_row_keys(per_request_timeout=-1)
-                    assert "per_request_timeout must be greater than 0" in str(e.value)
+                    await table.sample_row_keys(attempt_timeout=-1)
+                    assert "attempt_timeout must be greater than 0" in str(e.value)
                 with pytest.raises(ValueError) as e:
                     await table.sample_row_keys(
-                        operation_timeout=10, per_request_timeout=20
+                        operation_timeout=10, attempt_timeout=20
                     )
                     assert (
-                        "per_request_timeout must not be greater than operation_timeout"
+                        "attempt_timeout must not be greater than operation_timeout"
                         in str(e.value)
                     )
 
@@ -1738,7 +1738,7 @@ class TestSampleRowKeys:
                     table.client._gapic_client, "sample_row_keys", AsyncMock()
                 ) as sample_row_keys:
                     sample_row_keys.return_value = self._make_gapic_stream([])
-                    await table.sample_row_keys(per_request_timeout=expected_timeout)
+                    await table.sample_row_keys(attempt_timeout=expected_timeout)
                     args, kwargs = sample_row_keys.call_args
                     assert len(args) == 0
                     assert len(kwargs) == 5
@@ -1852,7 +1852,7 @@ class TestMutateRow:
     )
     async def test_mutate_row(self, mutation_arg):
         """Test mutations with no errors"""
-        expected_per_request_timeout = 19
+        expected_attempt_timeout = 19
         async with self._make_client(project="project") as client:
             async with client.get_table("instance", "table") as table:
                 with mock.patch.object(
@@ -1862,7 +1862,7 @@ class TestMutateRow:
                     await table.mutate_row(
                         "row_key",
                         mutation_arg,
-                        per_request_timeout=expected_per_request_timeout,
+                        attempt_timeout=expected_attempt_timeout,
                     )
                     assert mock_gapic.call_count == 1
                     request = mock_gapic.call_args[0][0]
@@ -1877,8 +1877,8 @@ class TestMutateRow:
                         else [mutation_arg._to_dict()]
                     )
                     assert request["mutations"] == formatted_mutations
-                    found_per_request_timeout = mock_gapic.call_args[1]["timeout"]
-                    assert found_per_request_timeout == expected_per_request_timeout
+                    found_attempt_timeout = mock_gapic.call_args[1]["timeout"]
+                    assert found_attempt_timeout == expected_attempt_timeout
 
     @pytest.mark.parametrize(
         "retryable_exception",
@@ -2046,7 +2046,7 @@ class TestBulkMutateRows:
     )
     async def test_bulk_mutate_rows(self, mutation_arg):
         """Test mutations with no errors"""
-        expected_per_request_timeout = 19
+        expected_attempt_timeout = 19
         async with self._make_client(project="project") as client:
             async with client.get_table("instance", "table") as table:
                 with mock.patch.object(
@@ -2056,7 +2056,7 @@ class TestBulkMutateRows:
                     bulk_mutation = mutations.RowMutationEntry(b"row_key", mutation_arg)
                     await table.bulk_mutate_rows(
                         [bulk_mutation],
-                        per_request_timeout=expected_per_request_timeout,
+                        attempt_timeout=expected_attempt_timeout,
                     )
                     assert mock_gapic.call_count == 1
                     kwargs = mock_gapic.call_args[1]
@@ -2065,7 +2065,7 @@ class TestBulkMutateRows:
                         == "projects/project/instances/instance/tables/table"
                     )
                     assert kwargs["entries"] == [bulk_mutation._to_dict()]
-                    assert kwargs["timeout"] == expected_per_request_timeout
+                    assert kwargs["timeout"] == expected_attempt_timeout
 
     @pytest.mark.asyncio
     async def test_bulk_mutate_rows_multiple_entries(self):

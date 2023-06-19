@@ -76,7 +76,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         client: BigtableAsyncClient,
         *,
         operation_timeout: float = 600.0,
-        per_request_timeout: float | None = None,
+        attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -88,7 +88,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
           - request: the request dict to send to the Bigtable API
           - client: the Bigtable client to use to make the request
           - operation_timeout: the timeout to use for the entire operation, in seconds
-          - per_request_timeout: the timeout to use when waiting for each individual grpc request, in seconds
+          - attempt_timeout: the timeout to use when waiting for each individual grpc request, in seconds
                 If not specified, defaults to operation_timeout
         """
         self._last_emitted_row_key: bytes | None = None
@@ -97,7 +97,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         self.operation_timeout = operation_timeout
         # use generator to lower per-attempt timeout as we approach operation_timeout deadline
         attempt_timeout_gen = _attempt_timeout_generator(
-            per_request_timeout, operation_timeout
+            attempt_timeout, operation_timeout
         )
         row_limit = request.get("rows_limit", 0)
         # lock in paramters for retryable wrapper

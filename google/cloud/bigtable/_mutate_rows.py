@@ -57,7 +57,7 @@ class _MutateRowsOperation:
         table: "Table",
         mutation_entries: list["RowMutationEntry"],
         operation_timeout: float,
-        per_request_timeout: float | None,
+        attempt_timeout: float | None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -69,7 +69,7 @@ class _MutateRowsOperation:
           - table: the table associated with the request
           - mutation_entries: a list of RowMutationEntry objects to send to the server
           - operation_timeout: the timeout t o use for the entire operation, in seconds.
-          - per_request_timeout: the timeoutto use for each mutate_rows attempt, in seconds.
+          - attempt_timeout: the timeoutto use for each mutate_rows attempt, in seconds.
               If not specified, the request will run until operation_timeout is reached.
         """
         # create partial function to pass to trigger rpc call
@@ -100,7 +100,7 @@ class _MutateRowsOperation:
         self._operation = _convert_retry_deadline(retry_wrapped, operation_timeout)
         # initialize state
         self.timeout_generator = _attempt_timeout_generator(
-            per_request_timeout, operation_timeout
+            attempt_timeout, operation_timeout
         )
         self.mutations = mutation_entries
         self.remaining_indices = list(range(len(self.mutations)))

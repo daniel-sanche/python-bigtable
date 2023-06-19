@@ -314,7 +314,7 @@ class BigtableDataClient(ClientWithProject):
         table_id: str,
         app_profile_id: str | None = None,
         default_operation_timeout: float = 600,
-        default_per_request_timeout: float | None = None,
+        default_attempt_timeout: float | None = None,
     ) -> Table:
         """
         Returns a table instance for making data API requests
@@ -333,7 +333,7 @@ class BigtableDataClient(ClientWithProject):
             table_id,
             app_profile_id,
             default_operation_timeout=default_operation_timeout,
-            default_per_request_timeout=default_per_request_timeout,
+            default_attempt_timeout=default_attempt_timeout,
         )
 
     async def __aenter__(self):
@@ -361,7 +361,7 @@ class Table:
         app_profile_id: str | None = None,
         *,
         default_operation_timeout: float = 600,
-        default_per_request_timeout: float | None = None,
+        default_attempt_timeout: float | None = None,
     ):
         """
         Initialize a Table instance
@@ -377,7 +377,7 @@ class Table:
             app_profile_id: (Optional) The app profile to associate with requests.
                 https://cloud.google.com/bigtable/docs/app-profiles
             default_operation_timeout: (Optional) The default timeout, in seconds
-            default_per_request_timeout: (Optional) The default timeout for individual
+            default_attempt_timeout: (Optional) The default timeout for individual
                 rpc requests, in seconds
         Raises:
           - RuntimeError if called outside of an async context (no running event loop)
@@ -385,14 +385,14 @@ class Table:
         # validate timeouts
         if default_operation_timeout <= 0:
             raise ValueError("default_operation_timeout must be greater than 0")
-        if default_per_request_timeout is not None and default_per_request_timeout <= 0:
-            raise ValueError("default_per_request_timeout must be greater than 0")
+        if default_attempt_timeout is not None and default_attempt_timeout <= 0:
+            raise ValueError("default_attempt_timeout must be greater than 0")
         if (
-            default_per_request_timeout is not None
-            and default_per_request_timeout > default_operation_timeout
+            default_attempt_timeout is not None
+            and default_attempt_timeout > default_operation_timeout
         ):
             raise ValueError(
-                "default_per_request_timeout must be less than default_operation_timeout"
+                "default_attempt_timeout must be less than default_operation_timeout"
             )
         self.client = client
         self.instance_id = instance_id
@@ -406,7 +406,7 @@ class Table:
         self.app_profile_id = app_profile_id
 
         self.default_operation_timeout = default_operation_timeout
-        self.default_per_request_timeout = default_per_request_timeout
+        self.default_attempt_timeout = default_attempt_timeout
 
         # raises RuntimeError if called outside of an async context (no running event loop)
         try:
@@ -423,7 +423,7 @@ class Table:
         query: ReadRowsQuery | dict[str, Any],
         *,
         operation_timeout: float | None = None,
-        per_request_timeout: float | None = None,
+        attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -442,10 +442,10 @@ class Table:
                  Failed requests will be retried within the budget.
                  time is only counted while actively waiting on the network.
                  If None, defaults to the Table's default_operation_timeout
-            - per_request_timeout: the time budget for an individual network request, in seconds.
+            - attempt_timeout: the time budget for an individual network request, in seconds.
                 If it takes longer than this time to complete, the request will be cancelled with
                 a DeadlineExceeded exception, and a retry will be attempted.
-                If None, defaults to the Table's default_per_request_timeout
+                If None, defaults to the Table's default_attempt_timeout
             - retryable_exceptions: the set of grpc exceptions that will be retried
                 if the request fails within the operation_timeout budget.
         Returns:
@@ -459,33 +459,33 @@ class Table:
         """
 
         operation_timeout = operation_timeout or self.default_operation_timeout
-        per_request_timeout = per_request_timeout or self.default_per_request_timeout
+        attempt_timeout = attempt_timeout or self.default_attempt_timeout
 
         if operation_timeout <= 0:
             raise ValueError("operation_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout <= 0:
-            raise ValueError("per_request_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout > operation_timeout:
+        if attempt_timeout is not None and attempt_timeout <= 0:
+            raise ValueError("attempt_timeout must be greater than 0")
+        if attempt_timeout is not None and attempt_timeout > operation_timeout:
             raise ValueError(
-                "per_request_timeout must not be greater than operation_timeout"
+                "attempt_timeout must not be greater than operation_timeout"
             )
-        if per_request_timeout is None:
-            per_request_timeout = operation_timeout
+        if attempt_timeout is None:
+            attempt_timeout = operation_timeout
         request = query._to_dict() if isinstance(query, ReadRowsQuery) else query
         request["table_name"] = self.table_name
         if self.app_profile_id:
             request["app_profile_id"] = self.app_profile_id
 
         # read_rows smart retries is implemented using a series of iterators:
-        # - client.read_rows: outputs raw ReadRowsResponse objects from backend. Has per_request_timeout
+        # - client.read_rows: outputs raw ReadRowsResponse objects from backend. Has attempt_timeout
         # - ReadRowsOperation.merge_row_response_stream: parses chunks into rows
-        # - ReadRowsOperation.retryable_merge_rows: adds retries, caching, revised requests, per_request_timeout
+        # - ReadRowsOperation.retryable_merge_rows: adds retries, caching, revised requests, attempt_timeout
         # - ReadRowsIterator: adds idle_timeout, moves stats out of stream and into attribute
         row_merger = _ReadRowsOperation(
             request,
             self.client._gapic_client,
             operation_timeout=operation_timeout,
-            per_request_timeout=per_request_timeout,
+            attempt_timeout=attempt_timeout,
             retryable_exceptions=retryable_exceptions,
         )
         output_generator = ReadRowsIterator(row_merger)
@@ -499,7 +499,7 @@ class Table:
         query: ReadRowsQuery | dict[str, Any],
         *,
         operation_timeout: float | None = None,
-        per_request_timeout: float | None = None,
+        attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -519,10 +519,10 @@ class Table:
                  Failed requests will be retried within the budget.
                  time is only counted while actively waiting on the network.
                  If None, defaults to the Table's default_operation_timeout
-            - per_request_timeout: the time budget for an individual network request, in seconds.
+            - attempt_timeout: the time budget for an individual network request, in seconds.
                 If it takes longer than this time to complete, the request will be cancelled with
                 a DeadlineExceeded exception, and a retry will be attempted.
-                If None, defaults to the Table's default_per_request_timeout
+                If None, defaults to the Table's default_attempt_timeout
             - retryable_exceptions: the set of grpc exceptions that will be retried
                 if the request fails within the operation_timeout budget.
         Returns:
@@ -531,7 +531,7 @@ class Table:
         row_generator = await self.read_rows_stream(
             query,
             operation_timeout=operation_timeout,
-            per_request_timeout=per_request_timeout,
+            attempt_timeout=attempt_timeout,
             retryable_exceptions=retryable_exceptions,
         )
         results = [row async for row in row_generator]
@@ -543,7 +543,7 @@ class Table:
         *,
         row_filter: RowFilter | None = None,
         operation_timeout: int | float | None = 60,
-        per_request_timeout: int | float | None = None,
+        attempt_timeout: int | float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -560,10 +560,10 @@ class Table:
                  Failed requests will be retried within the budget.
                  time is only counted while actively waiting on the network.
                  If None, defaults to the Table's default_operation_timeout
-            - per_request_timeout: the time budget for an individual network request, in seconds.
+            - attempt_timeout: the time budget for an individual network request, in seconds.
                 If it takes longer than this time to complete, the request will be cancelled with
                 a DeadlineExceeded exception, and a retry will be attempted.
-                If None, defaults to the Table's default_per_request_timeout
+                If None, defaults to the Table's default_attempt_timeout
             - retryable_exceptions: the set of grpc exceptions that will be retried
                 if the request fails within the operation_timeout budget.
         Raises:
@@ -577,7 +577,7 @@ class Table:
         results = await self.read_rows(
             query,
             operation_timeout=operation_timeout,
-            per_request_timeout=per_request_timeout,
+            attempt_timeout=attempt_timeout,
             retryable_exceptions=retryable_exceptions,
         )
         if len(results) == 0:
@@ -589,7 +589,7 @@ class Table:
         query_list: list[ReadRowsQuery] | list[dict[str, Any]],
         *,
         operation_timeout: int | float | None = None,
-        per_request_timeout: int | float | None = None,
+        attempt_timeout: int | float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -615,10 +615,10 @@ class Table:
                  Failed requests will be retried within the budget.
                  time is only counted while actively waiting on the network.
                  If None, defaults to the Table's default_operation_timeout
-            - per_request_timeout: the time budget for an individual network request, in seconds.
+            - attempt_timeout: the time budget for an individual network request, in seconds.
                 If it takes longer than this time to complete, the request will be cancelled with
                 a DeadlineExceeded exception, and a retry will be attempted.
-                If None, defaults to the Table's default_per_request_timeout
+                If None, defaults to the Table's default_attempt_timeout
             - retryable_exceptions: the set of grpc exceptions that will be retried
                 if the request fails within the operation_timeout budget.
         Raises:
@@ -631,7 +631,7 @@ class Table:
             self.read_rows(
                 query,
                 operation_timeout=operation_timeout,
-                per_request_timeout=per_request_timeout,
+                attempt_timeout=attempt_timeout,
                 retryable_exceptions=retryable_exceptions,
             )
             for query in query_list
@@ -663,7 +663,7 @@ class Table:
         row_key: str | bytes,
         *,
         operation_timeout: int | float | None = 60,
-        per_request_timeout: int | float | None = None,
+        attempt_timeout: int | float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -681,10 +681,10 @@ class Table:
                  Failed requests will be retried within the budget.
                  time is only counted while actively waiting on the network.
                  If None, defaults to the Table's default_operation_timeout
-            - per_request_timeout: the time budget for an individual network request, in seconds.
+            - attempt_timeout: the time budget for an individual network request, in seconds.
                 If it takes longer than this time to complete, the request will be cancelled with
                 a DeadlineExceeded exception, and a retry will be attempted.
-                If None, defaults to the Table's default_per_request_timeout
+                If None, defaults to the Table's default_attempt_timeout
             - retryable_exceptions: the set of grpc exceptions that will be retried
                 if the request fails within the operation_timeout budget.
         Returns:
@@ -699,7 +699,7 @@ class Table:
         results = await self.read_rows(
             query,
             operation_timeout=operation_timeout,
-            per_request_timeout=per_request_timeout,
+            attempt_timeout=attempt_timeout,
             retryable_exceptions=retryable_exceptions,
         )
         return len(results) > 0
@@ -708,7 +708,7 @@ class Table:
         self,
         *,
         operation_timeout: float | None = None,
-        per_request_timeout: float | None = None,
+        attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -730,10 +730,10 @@ class Table:
                  Failed requests will be retried within the budget.
                  time is only counted while actively waiting on the network.
                  If None, defaults to the Table's default_operation_timeout
-            - per_request_timeout: the time budget for an individual network request, in seconds.
+            - attempt_timeout: the time budget for an individual network request, in seconds.
                 If it takes longer than this time to complete, the request will be cancelled with
                 a DeadlineExceeded exception, and a retry will be attempted.
-                If None, defaults to the Table's default_per_request_timeout
+                If None, defaults to the Table's default_attempt_timeout
             - retryable_exceptions: the set of grpc exceptions that will be retried
                 if the request fails within the operation_timeout budget.
         Returns:
@@ -753,7 +753,7 @@ class Table:
 
         # prepare retryable
         retry_wrapped = _wrap_with_default_retry(
-            self, execute_rpc, operation_timeout, per_request_timeout, retryable_exceptions
+            self, execute_rpc, operation_timeout, attempt_timeout, retryable_exceptions
         )
         return await retry_wrapped()
 
@@ -775,7 +775,7 @@ class Table:
         mutations: list[Mutation] | Mutation,
         *,
         operation_timeout: float | None = 60,
-        per_request_timeout: float | None = None,
+        attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -797,7 +797,7 @@ class Table:
                  Failed requests will be retried within the budget.
                  time is only counted while actively waiting on the network.
                  DeadlineExceeded exception raised after timeout
-             - per_request_timeout: the time budget for an individual network request,
+             - attempt_timeout: the time budget for an individual network request,
                in seconds. If it takes longer than this time to complete, the request
                will be cancelled with a DeadlineExceeded exception, and a retry will be
                attempted if within operation_timeout budget
@@ -829,7 +829,7 @@ class Table:
             self,
             self.client._gapic_client.mutate_row,
             operation_timeout,
-            per_request_timeout,
+            attempt_timeout,
             retryable_exceptions,
         )
         # trigger rpc
@@ -840,7 +840,7 @@ class Table:
         mutation_entries: list[RowMutationEntry],
         *,
         operation_timeout: float | None = 60,
-        per_request_timeout: float | None = None,
+        attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -866,7 +866,7 @@ class Table:
                 Failed requests will be retried within the budget.
                 time is only counted while actively waiting on the network.
                 DeadlineExceeded exception raised after timeout
-            - per_request_timeout: the time budget for an individual network request,
+            - attempt_timeout: the time budget for an individual network request,
                 in seconds. If it takes longer than this time to complete, the request
                 will be cancelled with a DeadlineExceeded exception, and a retry will
                 be attempted if within operation_timeout budget
@@ -877,21 +877,21 @@ class Table:
                 Contains details about any failed entries in .exceptions
         """
         operation_timeout = operation_timeout or self.default_operation_timeout
-        per_request_timeout = per_request_timeout or self.default_per_request_timeout
+        attempt_timeout = attempt_timeout or self.default_attempt_timeout
 
         if operation_timeout <= 0:
             raise ValueError("operation_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout <= 0:
-            raise ValueError("per_request_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout > operation_timeout:
-            raise ValueError("per_request_timeout must be less than operation_timeout")
+        if attempt_timeout is not None and attempt_timeout <= 0:
+            raise ValueError("attempt_timeout must be greater than 0")
+        if attempt_timeout is not None and attempt_timeout > operation_timeout:
+            raise ValueError("attempt_timeout must be less than operation_timeout")
 
         operation = _MutateRowsOperation(
             self.client._gapic_client,
             self,
             mutation_entries,
             operation_timeout,
-            per_request_timeout,
+            attempt_timeout,
             retryable_exceptions=retryable_exceptions,
         )
         await operation.start()
@@ -904,7 +904,7 @@ class Table:
         true_case_mutations: Mutation | list[Mutation] | None = None,
         false_case_mutations: Mutation | list[Mutation] | None = None,
         operation_timeout: int | float | None = 20,
-        per_request_timeout: float | None = None,
+        attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (),
     ) -> bool:
         """
@@ -934,7 +934,7 @@ class Table:
                 `true_case_mutations is empty, and at most 100000.
             - operation_timeout: the time budget for the entire operation, in seconds.
                 Failed requests will not be retried.
-            - per_request_timeout: the time budget for an individual network request,
+            - attempt_timeout: the time budget for an individual network request,
                 in seconds. If it takes longer than this time to complete, the request
                 will be cancelled with a DeadlineExceeded exception, and a retry will
                 be attempted if within operation_timeout budget
@@ -964,7 +964,7 @@ class Table:
             self,
             self.client._gapic_client.check_and_mutate_row,
             operation_timeout,
-            per_request_timeout,
+            attempt_timeout,
             retryable_exceptions,
         )
         # trigger rpc
@@ -986,7 +986,7 @@ class Table:
         rules: ReadModifyWriteRule | list[ReadModifyWriteRule],
         *,
         operation_timeout: int | float | None = 20,
-        per_request_timeout: float | None = None,
+        attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (),
     ) -> Row:
         """
@@ -1005,7 +1005,7 @@ class Table:
                 results of later ones.
            - operation_timeout: the time budget for the entire operation, in seconds.
                 Failed requests will not be retried.
-            - per_request_timeout: the time budget for an individual network request,
+            - attempt_timeout: the time budget for an individual network request,
                 in seconds. If it takes longer than this time to complete, the request
                 will be cancelled with a DeadlineExceeded exception, and a retry will
                 be attempted if within operation_timeout budget
@@ -1030,7 +1030,7 @@ class Table:
             self,
             self.client._gapic_client.read_modify_write_row,
             operation_timeout,
-            per_request_timeout,
+            attempt_timeout,
             retryable_exceptions,
         )
         # convert RetryErrors from retry wrapper into DeadlineExceeded errors

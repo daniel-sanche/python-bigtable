@@ -39,7 +39,7 @@ class TestMutateRowsOperation:
             kwargs["table"] = kwargs.pop("table", AsyncMock())
             kwargs["mutation_entries"] = kwargs.pop("mutation_entries", [])
             kwargs["operation_timeout"] = kwargs.pop("operation_timeout", 5)
-            kwargs["per_request_timeout"] = kwargs.pop("per_request_timeout", 0.1)
+            kwargs["attempt_timeout"] = kwargs.pop("per_request_timeout", 0.1)
         return self._target_class()(*args, **kwargs)
 
     async def _mock_stream(self, mutation_list, error_dict):
@@ -227,7 +227,7 @@ class TestMutateRowsOperation:
         mock_gapic_fn = self._make_mock_gapic(mutations)
         instance = self._make_one(
             mutation_entries=mutations,
-            per_request_timeout=expected_timeout,
+            attempt_timeout=expected_timeout,
         )
         with mock.patch.object(instance, "_gapic_fn", mock_gapic_fn):
             await instance._run_attempt()
