@@ -42,7 +42,6 @@ from google.cloud.bigtable_v2.services.bigtable.transports.pooled_grpc_asyncio i
 from google.cloud.bigtable_v2.types.bigtable import PingAndWarmRequest
 from google.cloud.client import ClientWithProject
 from google.api_core.exceptions import GoogleAPICallError
-from google.api_core import retry_async as retries
 from google.api_core import exceptions as core_exceptions
 from google.cloud.bigtable._read_rows import _ReadRowsOperation
 
@@ -58,8 +57,8 @@ from google.cloud.bigtable.exceptions import ShardedReadRowsExceptionGroup
 from google.cloud.bigtable.mutations import Mutation, RowMutationEntry
 from google.cloud.bigtable._mutate_rows import _MutateRowsOperation
 from google.cloud.bigtable._helpers import _make_metadata
-from google.cloud.bigtable._helpers import _convert_retry_deadline
 from google.cloud.bigtable._helpers import _attempt_timeout_generator
+from google.cloud.bigtable._helpers import _wrap_with_default_retry
 
 from google.cloud.bigtable.read_modify_write_rules import ReadModifyWriteRule
 from google.cloud.bigtable.row_filters import RowFilter
@@ -759,25 +758,6 @@ class Table:
         attempt_timeout_gen = _attempt_timeout_generator(
             per_request_timeout, operation_timeout
         )
-        # prepare retryable
-        predicate = retries.if_exception_type(*retryable_exceptions)
-        transient_errors = []
-
-        def on_error_fn(exc):
-            # add errors to list if retryable
-            if predicate(exc):
-                transient_errors.append(exc)
-
-        retry = retries.AsyncRetry(
-            predicate=predicate,
-            timeout=operation_timeout,
-            initial=0.01,
-            multiplier=2,
-            maximum=60,
-            on_error=on_error_fn,
-            is_stream=False,
-        )
-
         # prepare request
         metadata = _make_metadata(self.table_name, self.app_profile_id)
 
@@ -791,10 +771,11 @@ class Table:
             )
             return [(s.row_key, s.offset_bytes) async for s in results]
 
-        wrapped_fn = _convert_retry_deadline(
-            retry(execute_rpc), operation_timeout, transient_errors
+        # prepare retryable
+        retry_wrapped = _wrap_with_default_retry(
+            execute_rpc, operation_timeout, retryable_exceptions
         )
-        return await wrapped_fn()
+        return await retry_wrapped()
 
     def mutations_batcher(self, **kwargs) -> MutationsBatcher:
         """
@@ -869,36 +850,19 @@ class Table:
             mutations = [mutations]
         request["mutations"] = [mutation._to_dict() for mutation in mutations]
 
-        if all(mutation.is_idempotent() for mutation in mutations):
-            # mutations are all idempotent and safe to retry
-            predicate = retries.if_exception_type(*retryable_exceptions)
-        else:
-            # mutations should not be retried
-            predicate = retries.if_exception_type()
+        if not all(mutation.is_idempotent() for mutation in mutations):
+            # contains non-idempotent mutations. Do not retry
+            retryable_exceptions = ()
 
-        transient_errors = []
-
-        def on_error_fn(exc):
-            if predicate(exc):
-                transient_errors.append(exc)
-
-        retry = retries.AsyncRetry(
-            predicate=predicate,
-            on_error=on_error_fn,
-            timeout=operation_timeout,
-            initial=0.01,
-            multiplier=2,
-            maximum=60,
-        )
         # wrap rpc in retry logic
-        retry_wrapped = retry(self.client._gapic_client.mutate_row)
-        # convert RetryErrors from retry wrapper into DeadlineExceeded errors
-        deadline_wrapped = _convert_retry_deadline(
-            retry_wrapped, operation_timeout, transient_errors
+        retry_wrapped = _wrap_with_default_retry(
+            self.client._gapic_client.mutate_row,
+            operation_timeout,
+            retryable_exceptions,
         )
         metadata = _make_metadata(self.table_name, self.app_profile_id)
         # trigger rpc
-        await deadline_wrapped(
+        await retry_wrapped(
             request, timeout=per_request_timeout, metadata=metadata, retry=None
         )
 
@@ -1014,8 +978,17 @@ class Table:
             - GoogleAPIError exceptions from grpc call
         """
         operation_timeout = operation_timeout or self.default_operation_timeout
+        per_request_timeout = per_request_timeout or self.default_per_request_timeout
         if operation_timeout <= 0:
             raise ValueError("operation_timeout must be greater than 0")
+        if per_request_timeout is not None and per_request_timeout <= 0:
+            raise ValueError("per_request_timeout must be greater than 0")
+        if per_request_timeout is not None and per_request_timeout > operation_timeout:
+            raise ValueError(
+                "per_request_timeout must not be greater than operation_timeout"
+            )
+        if per_request_timeout is None:
+            per_request_timeout = operation_timeout
         row_key = row_key.encode("utf-8") if isinstance(row_key, str) else row_key
         if true_case_mutations is not None and not isinstance(
             true_case_mutations, list
@@ -1030,31 +1003,14 @@ class Table:
         if predicate is not None and not isinstance(predicate, dict):
             predicate = predicate.to_dict()
         metadata = _make_metadata(self.table_name, self.app_profile_id)
-        # create retry logic
-        retry_predicate = retries.if_exception_type(*retryable_exceptions)
-        transient_errors = []
-
-        def on_error_fn(exc):
-            if retry_predicate(exc):
-                transient_errors.append(exc)
-
-        retry = retries.AsyncRetry(
-            predicate=retry_predicate,
-            on_error=on_error_fn,
-            timeout=operation_timeout,
-            initial=0.01,
-            multiplier=2,
-            maximum=60,
-        )
         # wrap rpc in retry logic
-        retry_wrapped = retry(self.client._gapic_client.check_and_mutate_row)
-        # convert RetryErrors from retry wrapper into DeadlineExceeded errors
-        deadline_wrapped = _convert_retry_deadline(
-            retry_wrapped, operation_timeout, transient_errors
+        retry_wrapped = _wrap_with_default_retry(
+            self.client._gapic_client.check_and_mutate_row,
+            operation_timeout,
+            retryable_exceptions,
         )
-        metadata = _make_metadata(self.table_name, self.app_profile_id)
         # trigger rpc
-        result = await deadline_wrapped(
+        result = await retry_wrapped(
             request={
                 "predicate_filter": predicate,
                 "true_mutations": true_case_dict,
@@ -1064,7 +1020,7 @@ class Table:
                 "app_profile_id": self.app_profile_id,
             },
             metadata=metadata,
-            timeout=operation_timeout,
+            timeout=per_request_timeout,
         )
         return result.predicate_matched
 
@@ -1107,9 +1063,18 @@ class Table:
             - GoogleAPIError exceptions from grpc call
         """
         operation_timeout = operation_timeout or self.default_operation_timeout
+        per_request_timeout = per_request_timeout or self.default_per_request_timeout
         row_key = row_key.encode("utf-8") if isinstance(row_key, str) else row_key
         if operation_timeout <= 0:
             raise ValueError("operation_timeout must be greater than 0")
+        if per_request_timeout is not None and per_request_timeout <= 0:
+            raise ValueError("per_request_timeout must be greater than 0")
+        if per_request_timeout is not None and per_request_timeout > operation_timeout:
+            raise ValueError(
+                "per_request_timeout must not be greater than operation_timeout"
+            )
+        if per_request_timeout is None:
+            per_request_timeout = operation_timeout
         if rules is not None and not isinstance(rules, list):
             rules = [rules]
         if not rules:
@@ -1117,29 +1082,14 @@ class Table:
         # concert to dict representation
         rules_dict = [rule._to_dict() for rule in rules]
         metadata = _make_metadata(self.table_name, self.app_profile_id)
-        # create retry logic
-        retry_predicate = retries.if_exception_type(*retryable_exceptions)
-        transient_errors = []
-
-        def on_error_fn(exc):
-            if retry_predicate(exc):
-                transient_errors.append(exc)
-
-        retry = retries.AsyncRetry(
-            predicate=retry_predicate,
-            on_error=on_error_fn,
-            timeout=operation_timeout,
-            initial=0.01,
-            multiplier=2,
-            maximum=60,
-        )
         # wrap rpc in retry logic
-        retry_wrapped = retry(self.client._gapic_client.read_modify_write_row)
-        # convert RetryErrors from retry wrapper into DeadlineExceeded errors
-        deadline_wrapped = _convert_retry_deadline(
-            retry_wrapped, operation_timeout, transient_errors
+        retry_wrapped = _wrap_with_default_retry(
+            self.client._gapic_client.read_modify_write_row,
+            operation_timeout,
+            retryable_exceptions,
         )
-        result = await deadline_wrapped(
+        # convert RetryErrors from retry wrapper into DeadlineExceeded errors
+        result = await retry_wrapped(
             request={
                 "rules": rules_dict,
                 "table_name": self.table_name,
@@ -1147,7 +1097,7 @@ class Table:
                 "app_profile_id": self.app_profile_id,
             },
             metadata=metadata,
-            timeout=operation_timeout,
+            timeout=per_request_timeout,
         )
         # construct Row from result
         return Row._from_pb(result.row)

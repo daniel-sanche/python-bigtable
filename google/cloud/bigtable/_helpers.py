@@ -13,11 +13,12 @@
 #
 from __future__ import annotations
 
-from typing import Callable, Any
+from typing import Callable, Sequence, Type, Any
 from inspect import iscoroutinefunction
 import time
 
 from google.api_core import exceptions as core_exceptions
+from google.api_core import retry_async as retries
 from google.cloud.bigtable.exceptions import RetryExceptionGroup
 
 """
@@ -109,3 +110,38 @@ def _convert_retry_deadline(
             handle_error()
 
     return wrapper_async if iscoroutinefunction(func) else wrapper
+
+
+def _wrap_with_default_retry(
+    gapic_func: Callable[..., Any],
+    operation_timeout: float,
+    retryable_exceptions: Sequence[Type[Exception]],
+):
+    """
+    Helper function to wrap a gapic function with retry logic
+
+    Any errors that occur as part of the retry loop will be collected and
+    re-raised as a RetryExceptionGroup.
+    """
+    predicate = retries.if_exception_type(*retryable_exceptions)
+    transient_errors = []
+
+    def on_error_fn(exc):
+        if predicate(exc):
+            transient_errors.append(exc)
+
+    retry = retries.AsyncRetry(
+        predicate=predicate,
+        on_error=on_error_fn,
+        timeout=operation_timeout,
+        initial=0.01,
+        multiplier=2,
+        maximum=60,
+    )
+    # wrap rpc in retry logic
+    retry_wrapped = retry(gapic_func)
+    # convert RetryErrors from retry wrapper into DeadlineExceeded errors
+    deadline_wrapped = _convert_retry_deadline(
+        retry_wrapped, operation_timeout, transient_errors
+    )
+    return deadline_wrapped
