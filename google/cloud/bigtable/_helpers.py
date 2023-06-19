@@ -114,12 +114,17 @@ def _convert_retry_deadline(
     return wrapper_async if iscoroutinefunction(func) else wrapper
 
 
-def _wrap_with_default_retry(
+def _enhanced_gapic_call(
     table,
     gapic_func: Callable[..., Any],
     operation_timeout: float | None,
     attempt_timeout: float | None,
     retryable_exceptions: Sequence[Type[Exception]],
+    *,
+    retry_initial=0.01,
+    retry_multiplier=2,
+    retry_maximum=60,
+    **kwargs,
 ):
     """
     Helper function to wrap a gapic function with retry logic
@@ -152,9 +157,9 @@ def _wrap_with_default_retry(
         predicate=predicate,
         on_error=on_error_fn,
         timeout=operation_timeout,
-        initial=0.01,
-        multiplier=2,
-        maximum=60,
+        initial=retry_initial,
+        multiplier=retry_multiplier,
+        maximum=retry_maximum,
     )
     # create metadata
     metadata = _make_metadata(table.table_name, table.app_profile_id)
@@ -162,13 +167,13 @@ def _wrap_with_default_retry(
     timeout_obj = _AttemptTimeoutReducer(attempt_timeout, operation_timeout)
     # wrap the gapic function with retry logic
     retryable_gapic = partial(
-        gapic_func, timeout=timeout_obj, retry=retry, metadata=metadata
+        gapic_func, timeout=timeout_obj, retry=retry, metadata=metadata, **kwargs,
     )
     # convert RetryErrors from retry wrapper into DeadlineExceeded errors
     deadline_wrapped = _convert_retry_deadline(
         retryable_gapic, operation_timeout, transient_errors
     )
-    return deadline_wrapped
+    return deadline_wrapped()
 
 
 class _AttemptTimeoutReducer(object):

@@ -56,7 +56,7 @@ from google.cloud.bigtable.exceptions import ShardedReadRowsExceptionGroup
 
 from google.cloud.bigtable.mutations import Mutation, RowMutationEntry
 from google.cloud.bigtable._mutate_rows import _MutateRowsOperation
-from google.cloud.bigtable._helpers import _wrap_with_default_retry
+from google.cloud.bigtable._helpers import _enhanced_gapic_call
 
 from google.cloud.bigtable.read_modify_write_rules import ReadModifyWriteRule
 from google.cloud.bigtable.row_filters import RowFilter
@@ -752,10 +752,9 @@ class Table:
             return [(s.row_key, s.offset_bytes) async for s in results]
 
         # prepare retryable
-        retry_wrapped = _wrap_with_default_retry(
+        return await _enhanced_gapic_call(
             self, execute_rpc, operation_timeout, attempt_timeout, retryable_exceptions
         )
-        return await retry_wrapped()
 
     def mutations_batcher(self, **kwargs) -> MutationsBatcher:
         """
@@ -824,16 +823,15 @@ class Table:
             # contains non-idempotent mutations. Do not retry
             retryable_exceptions = ()
 
-        # wrap rpc in retry logic
-        retry_wrapped = _wrap_with_default_retry(
+        # trigger rpc
+        await _enhanced_gapic_call(
             self,
             self.client._gapic_client.mutate_row,
             operation_timeout,
             attempt_timeout,
             retryable_exceptions,
+            request=request,
         )
-        # trigger rpc
-        await retry_wrapped(request)
 
     async def bulk_mutate_rows(
         self,
@@ -959,16 +957,13 @@ class Table:
         false_case_dict = [m._to_dict() for m in false_case_mutations or []]
         if predicate is not None and not isinstance(predicate, dict):
             predicate = predicate.to_dict()
-        # wrap rpc in retry logic
-        retry_wrapped = _wrap_with_default_retry(
+        # trigger rpc
+        result = await _enhanced_gapic_call(
             self,
             self.client._gapic_client.check_and_mutate_row,
             operation_timeout,
             attempt_timeout,
             retryable_exceptions,
-        )
-        # trigger rpc
-        result = await retry_wrapped(
             request={
                 "predicate_filter": predicate,
                 "true_mutations": true_case_dict,
@@ -1025,22 +1020,19 @@ class Table:
             raise ValueError("rules must contain at least one item")
         # concert to dict representation
         rules_dict = [rule._to_dict() for rule in rules]
-        # wrap rpc in retry logic
-        retry_wrapped = _wrap_with_default_retry(
+        # call gapic call with retries
+        result = await _enhanced_gapic_call(
             self,
             self.client._gapic_client.read_modify_write_row,
             operation_timeout,
             attempt_timeout,
             retryable_exceptions,
-        )
-        # convert RetryErrors from retry wrapper into DeadlineExceeded errors
-        result = await retry_wrapped(
             request={
                 "rules": rules_dict,
                 "table_name": self.table_name,
                 "row_key": row_key,
                 "app_profile_id": self.app_profile_id,
-            },
+            }
         )
         # construct Row from result
         return Row._from_pb(result.row)
