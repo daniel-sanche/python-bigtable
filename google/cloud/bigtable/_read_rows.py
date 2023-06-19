@@ -194,6 +194,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
             self._request,
             timeout=next(timeout_generator),
             metadata=metadata,
+            retry=None,
         )
         try:
             state_machine = _StateMachine()

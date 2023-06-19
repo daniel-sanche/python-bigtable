@@ -727,6 +727,7 @@ class Table:
                 app_profile_id=self.app_profile_id,
                 timeout=next(attempt_timeout_gen),
                 metadata=metadata,
+                retry=None,
             )
             return [(s.row_key, s.offset_bytes) async for s in results]
 
@@ -836,7 +837,9 @@ class Table:
         )
         metadata = _make_metadata(self.table_name, self.app_profile_id)
         # trigger rpc
-        await deadline_wrapped(request, timeout=per_request_timeout, metadata=metadata)
+        await deadline_wrapped(
+            request, timeout=per_request_timeout, metadata=metadata, retry=None
+        )
 
     async def bulk_mutate_rows(
         self,
@@ -907,7 +910,9 @@ class Table:
         *,
         true_case_mutations: Mutation | list[Mutation] | None = None,
         false_case_mutations: Mutation | list[Mutation] | None = None,
+        per_request_timeout: float | None = None,
         operation_timeout: int | float | None = 20,
+        retryable_exceptions: Sequence[Type[Exception]] = (),
     ) -> bool:
         """
         Mutates a row atomically based on the output of a predicate filter
@@ -958,7 +963,31 @@ class Table:
         if predicate is not None and not isinstance(predicate, dict):
             predicate = predicate.to_dict()
         metadata = _make_metadata(self.table_name, self.app_profile_id)
-        result = await self.client._gapic_client.check_and_mutate_row(
+        # create retry logic
+        retry_predicate = retries.if_exception_type(*retryable_exceptions)
+        transient_errors = []
+
+        def on_error_fn(exc):
+            if retry_predicate(exc):
+                transient_errors.append(exc)
+
+        retry = retries.AsyncRetry(
+            predicate=retry_predicate,
+            on_error=on_error_fn,
+            timeout=operation_timeout,
+            initial=0.01,
+            multiplier=2,
+            maximum=60,
+        )
+        # wrap rpc in retry logic
+        retry_wrapped = retry(self.client._gapic_client.check_and_mutate_row)
+        # convert RetryErrors from retry wrapper into DeadlineExceeded errors
+        deadline_wrapped = _convert_retry_deadline(
+            retry_wrapped, operation_timeout, transient_errors
+        )
+        metadata = _make_metadata(self.table_name, self.app_profile_id)
+        # trigger rpc
+        result = await deadline_wrapped(
             request={
                 "predicate_filter": predicate,
                 "true_mutations": true_case_dict,
@@ -977,7 +1006,9 @@ class Table:
         row_key: str | bytes,
         rules: ReadModifyWriteRule | list[ReadModifyWriteRule],
         *,
+        per_request_timeout: float | None = None,
         operation_timeout: int | float | None = 20,
+        retryable_exceptions: Sequence[Type[Exception]] = (),
     ) -> Row:
         """
         Reads and modifies a row atomically according to input ReadModifyWriteRules,
@@ -1012,7 +1043,29 @@ class Table:
         # concert to dict representation
         rules_dict = [rule._to_dict() for rule in rules]
         metadata = _make_metadata(self.table_name, self.app_profile_id)
-        result = await self.client._gapic_client.read_modify_write_row(
+        # create retry logic
+        retry_predicate = retries.if_exception_type(*retryable_exceptions)
+        transient_errors = []
+
+        def on_error_fn(exc):
+            if retry_predicate(exc):
+                transient_errors.append(exc)
+
+        retry = retries.AsyncRetry(
+            predicate=retry_predicate,
+            on_error=on_error_fn,
+            timeout=operation_timeout,
+            initial=0.01,
+            multiplier=2,
+            maximum=60,
+        )
+        # wrap rpc in retry logic
+        retry_wrapped = retry(self.client._gapic_client.read_modify_write_row)
+        # convert RetryErrors from retry wrapper into DeadlineExceeded errors
+        deadline_wrapped = _convert_retry_deadline(
+            retry_wrapped, operation_timeout, transient_errors
+        )
+        result = await deadline_wrapped(
             request={
                 "rules": rules_dict,
                 "table_name": self.table_name,
