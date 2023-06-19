@@ -56,8 +56,6 @@ from google.cloud.bigtable.exceptions import ShardedReadRowsExceptionGroup
 
 from google.cloud.bigtable.mutations import Mutation, RowMutationEntry
 from google.cloud.bigtable._mutate_rows import _MutateRowsOperation
-from google.cloud.bigtable._helpers import _make_metadata
-from google.cloud.bigtable._helpers import _attempt_timeout_generator
 from google.cloud.bigtable._helpers import _wrap_with_default_retry
 
 from google.cloud.bigtable.read_modify_write_rules import ReadModifyWriteRule
@@ -743,29 +741,11 @@ class Table:
         Raises:
             - GoogleAPICallError: if the sample_row_keys request fails
         """
-        # prepare timeouts
-        operation_timeout = operation_timeout or self.default_operation_timeout
-        per_request_timeout = per_request_timeout or self.default_per_request_timeout
-
-        if operation_timeout <= 0:
-            raise ValueError("operation_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout <= 0:
-            raise ValueError("per_request_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout > operation_timeout:
-            raise ValueError(
-                "per_request_timeout must not be greater than operation_timeout"
-            )
-        attempt_timeout_gen = _attempt_timeout_generator(
-            per_request_timeout, operation_timeout
-        )
-        # prepare request
-        metadata = _make_metadata(self.table_name, self.app_profile_id)
-
-        async def execute_rpc():
+        async def execute_rpc(timeout, metadata, **kwargs):
             results = await self.client._gapic_client.sample_row_keys(
                 table_name=self.table_name,
                 app_profile_id=self.app_profile_id,
-                timeout=next(attempt_timeout_gen),
+                timeout=timeout,
                 metadata=metadata,
                 retry=None,
             )
@@ -773,7 +753,7 @@ class Table:
 
         # prepare retryable
         retry_wrapped = _wrap_with_default_retry(
-            execute_rpc, operation_timeout, retryable_exceptions
+            self, execute_rpc, operation_timeout, per_request_timeout, retryable_exceptions
         )
         return await retry_wrapped()
 
@@ -830,16 +810,6 @@ class Table:
              - GoogleAPIError: raised on non-idempotent operations that cannot be
                  safely retried.
         """
-        operation_timeout = operation_timeout or self.default_operation_timeout
-        per_request_timeout = per_request_timeout or self.default_per_request_timeout
-
-        if operation_timeout <= 0:
-            raise ValueError("operation_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout <= 0:
-            raise ValueError("per_request_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout > operation_timeout:
-            raise ValueError("per_request_timeout must be less than operation_timeout")
-
         if isinstance(row_key, str):
             row_key = row_key.encode("utf-8")
         request = {"table_name": self.table_name, "row_key": row_key}
@@ -856,15 +826,14 @@ class Table:
 
         # wrap rpc in retry logic
         retry_wrapped = _wrap_with_default_retry(
+            self,
             self.client._gapic_client.mutate_row,
             operation_timeout,
+            per_request_timeout,
             retryable_exceptions,
         )
-        metadata = _make_metadata(self.table_name, self.app_profile_id)
         # trigger rpc
-        await retry_wrapped(
-            request, timeout=per_request_timeout, metadata=metadata, retry=None
-        )
+        await retry_wrapped(request)
 
     async def bulk_mutate_rows(
         self,
@@ -977,18 +946,6 @@ class Table:
         Raises:
             - GoogleAPIError exceptions from grpc call
         """
-        operation_timeout = operation_timeout or self.default_operation_timeout
-        per_request_timeout = per_request_timeout or self.default_per_request_timeout
-        if operation_timeout <= 0:
-            raise ValueError("operation_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout <= 0:
-            raise ValueError("per_request_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout > operation_timeout:
-            raise ValueError(
-                "per_request_timeout must not be greater than operation_timeout"
-            )
-        if per_request_timeout is None:
-            per_request_timeout = operation_timeout
         row_key = row_key.encode("utf-8") if isinstance(row_key, str) else row_key
         if true_case_mutations is not None and not isinstance(
             true_case_mutations, list
@@ -1002,11 +959,12 @@ class Table:
         false_case_dict = [m._to_dict() for m in false_case_mutations or []]
         if predicate is not None and not isinstance(predicate, dict):
             predicate = predicate.to_dict()
-        metadata = _make_metadata(self.table_name, self.app_profile_id)
         # wrap rpc in retry logic
         retry_wrapped = _wrap_with_default_retry(
+            self,
             self.client._gapic_client.check_and_mutate_row,
             operation_timeout,
+            per_request_timeout,
             retryable_exceptions,
         )
         # trigger rpc
@@ -1019,8 +977,6 @@ class Table:
                 "row_key": row_key,
                 "app_profile_id": self.app_profile_id,
             },
-            metadata=metadata,
-            timeout=per_request_timeout,
         )
         return result.predicate_matched
 
@@ -1062,30 +1018,19 @@ class Table:
         Raises:
             - GoogleAPIError exceptions from grpc call
         """
-        operation_timeout = operation_timeout or self.default_operation_timeout
-        per_request_timeout = per_request_timeout or self.default_per_request_timeout
         row_key = row_key.encode("utf-8") if isinstance(row_key, str) else row_key
-        if operation_timeout <= 0:
-            raise ValueError("operation_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout <= 0:
-            raise ValueError("per_request_timeout must be greater than 0")
-        if per_request_timeout is not None and per_request_timeout > operation_timeout:
-            raise ValueError(
-                "per_request_timeout must not be greater than operation_timeout"
-            )
-        if per_request_timeout is None:
-            per_request_timeout = operation_timeout
         if rules is not None and not isinstance(rules, list):
             rules = [rules]
         if not rules:
             raise ValueError("rules must contain at least one item")
         # concert to dict representation
         rules_dict = [rule._to_dict() for rule in rules]
-        metadata = _make_metadata(self.table_name, self.app_profile_id)
         # wrap rpc in retry logic
         retry_wrapped = _wrap_with_default_retry(
+            self,
             self.client._gapic_client.read_modify_write_row,
             operation_timeout,
+            per_request_timeout,
             retryable_exceptions,
         )
         # convert RetryErrors from retry wrapper into DeadlineExceeded errors
@@ -1096,8 +1041,6 @@ class Table:
                 "row_key": row_key,
                 "app_profile_id": self.app_profile_id,
             },
-            metadata=metadata,
-            timeout=per_request_timeout,
         )
         # construct Row from result
         return Row._from_pb(result.row)

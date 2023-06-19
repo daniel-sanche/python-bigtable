@@ -16,6 +16,8 @@ from __future__ import annotations
 from typing import Callable, Sequence, Type, Any
 from inspect import iscoroutinefunction
 import time
+from functools import partial
+from functools import wraps
 
 from google.api_core import exceptions as core_exceptions
 from google.api_core import retry_async as retries
@@ -113,8 +115,10 @@ def _convert_retry_deadline(
 
 
 def _wrap_with_default_retry(
+    table,
     gapic_func: Callable[..., Any],
-    operation_timeout: float,
+    operation_timeout: float | None,
+    per_request_timeout: float | None,
     retryable_exceptions: Sequence[Type[Exception]],
 ):
     """
@@ -123,6 +127,20 @@ def _wrap_with_default_retry(
     Any errors that occur as part of the retry loop will be collected and
     re-raised as a RetryExceptionGroup.
     """
+    # find proper timeout values
+    operation_timeout = operation_timeout or table.default_operation_timeout
+    per_request_timeout = per_request_timeout or table.default_per_request_timeout
+    if operation_timeout <= 0:
+        raise ValueError("operation_timeout must be greater than 0")
+    if per_request_timeout is not None and per_request_timeout <= 0:
+        raise ValueError("per_request_timeout must be greater than 0")
+    if per_request_timeout is not None and per_request_timeout > operation_timeout:
+        raise ValueError(
+            "per_request_timeout must not be greater than operation_timeout"
+        )
+    if per_request_timeout is None:
+        per_request_timeout = operation_timeout
+    # build retry
     predicate = retries.if_exception_type(*retryable_exceptions)
     transient_errors = []
 
@@ -138,10 +156,38 @@ def _wrap_with_default_retry(
         multiplier=2,
         maximum=60,
     )
-    # wrap rpc in retry logic
-    retry_wrapped = retry(gapic_func)
+    # create metadata
+    metadata = _make_metadata(table.table_name, table.app_profile_id)
+    # prepare timeout
+    timeout_obj = _AttemptTimeoutReducer(per_request_timeout, operation_timeout)
+    # wrap the gapic function with retry logic
+    retryable_gapic = partial(
+        gapic_func, timeout=timeout_obj, retry=retry, metadata=metadata
+    )
     # convert RetryErrors from retry wrapper into DeadlineExceeded errors
     deadline_wrapped = _convert_retry_deadline(
-        retry_wrapped, operation_timeout, transient_errors
+        retryable_gapic, operation_timeout, transient_errors
     )
     return deadline_wrapped
+
+
+class _AttemptTimeoutReducer(object):
+    """
+    Creates an _attempt_timeout_generator that will reduce the per attempt timeout value
+    as the operation timeout approaches, and wraps it in an object that can be passed
+    in to gapic functions as the timeout parameter.
+    """
+
+    def __init__(self, request_timeout, operation_timeout):
+        self._timeout_generator = _attempt_timeout_generator(
+            request_timeout, operation_timeout
+        )
+
+    def __call__(self, func):
+        @wraps(func)
+        def func_with_timeout(*args, **kwargs):
+            """Wrapped function that adds timeout."""
+            kwargs["timeout"] = next(self._timeout_generator)
+            return func(*args, **kwargs)
+
+        return func_with_timeout
