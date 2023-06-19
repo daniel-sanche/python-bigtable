@@ -434,9 +434,10 @@ class Table:
         ),
     ) -> ReadRowsIterator:
         """
+        Read a set of rows from the table, based on the specified query.
         Returns an iterator to asynchronously stream back row data.
 
-        Failed requests within operation_timeout and operation_deadline policies will be retried.
+        Failed requests within operation_timeout will be retried.
 
         Args:
             - query: contains details about which rows to return
@@ -448,7 +449,8 @@ class Table:
                 If it takes longer than this time to complete, the request will be cancelled with
                 a DeadlineExceeded exception, and a retry will be attempted.
                 If None, defaults to the Table's default_per_request_timeout
-
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
         Returns:
             - an asynchronous iterator that yields rows returned by the query
         Raises:
@@ -508,10 +510,24 @@ class Table:
         ),
     ) -> list[Row]:
         """
-        Helper function that returns a full list instead of a generator
+        Read a set of rows from the table, based on the specified query.
+        Retruns results as a list of Row objects when the request is complete.
+        For streamed results, use read_rows_stream.
 
-        See read_rows_stream
+        Failed requests within operation_timeout will be retried.
 
+        Args:
+            - query: contains details about which rows to return
+            - operation_timeout: the time budget for the entire operation, in seconds.
+                 Failed requests will be retried within the budget.
+                 time is only counted while actively waiting on the network.
+                 If None, defaults to the Table's default_operation_timeout
+            - per_request_timeout: the time budget for an individual network request, in seconds.
+                If it takes longer than this time to complete, the request will be cancelled with
+                a DeadlineExceeded exception, and a retry will be attempted.
+                If None, defaults to the Table's default_per_request_timeout
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
         Returns:
             - a list of the rows returned by the query
         """
@@ -538,10 +554,21 @@ class Table:
         ),
     ) -> Row | None:
         """
-        Helper function to return a single row
+        Return a single row from the table, based on the specified key.
 
-        See read_rows_stream
-
+        Args:
+            - row_key: the key of the row to read
+            - row_filter: an optional filter to apply to the row
+            - operation_timeout: the time budget for the entire operation, in seconds.
+                 Failed requests will be retried within the budget.
+                 time is only counted while actively waiting on the network.
+                 If None, defaults to the Table's default_operation_timeout
+            - per_request_timeout: the time budget for an individual network request, in seconds.
+                If it takes longer than this time to complete, the request will be cancelled with
+                a DeadlineExceeded exception, and a retry will be attempted.
+                If None, defaults to the Table's default_per_request_timeout
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
         Raises:
             - google.cloud.bigtable.exceptions.RowNotFound: if the row does not exist
         Returns:
@@ -587,6 +614,16 @@ class Table:
 
         Args:
             - query_list: a list of queries to run in parallel
+            - operation_timeout: the time budget for the entire operation, in seconds.
+                 Failed requests will be retried within the budget.
+                 time is only counted while actively waiting on the network.
+                 If None, defaults to the Table's default_operation_timeout
+            - per_request_timeout: the time budget for an individual network request, in seconds.
+                If it takes longer than this time to complete, the request will be cancelled with
+                a DeadlineExceeded exception, and a retry will be attempted.
+                If None, defaults to the Table's default_per_request_timeout
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
         Raises:
             - ShardedReadRowsExceptionGroup: if any of the queries failed
             - ValueError: if the query_list is empty
@@ -637,10 +674,22 @@ class Table:
         ),
     ) -> bool:
         """
-        Helper function to determine if a row exists
+        Return a boolean indicating whether the specified row exists in the table.
 
         uses the filters: chain(limit cells per row = 1, strip value)
 
+        Args:
+            - row_key: the key of the row to check
+            - operation_timeout: the time budget for the entire operation, in seconds.
+                 Failed requests will be retried within the budget.
+                 time is only counted while actively waiting on the network.
+                 If None, defaults to the Table's default_operation_timeout
+            - per_request_timeout: the time budget for an individual network request, in seconds.
+                If it takes longer than this time to complete, the request will be cancelled with
+                a DeadlineExceeded exception, and a retry will be attempted.
+                If None, defaults to the Table's default_per_request_timeout
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
         Returns:
             - a bool indicating whether the row exists
         """
@@ -679,6 +728,17 @@ class Table:
         RowKeySamples is simply a type alias for list[tuple[bytes, int]]; a list of
             row_keys, along with offset positions in the table
 
+        Args:
+            - operation_timeout: the time budget for the entire operation, in seconds.
+                 Failed requests will be retried within the budget.
+                 time is only counted while actively waiting on the network.
+                 If None, defaults to the Table's default_operation_timeout
+            - per_request_timeout: the time budget for an individual network request, in seconds.
+                If it takes longer than this time to complete, the request will be cancelled with
+                a DeadlineExceeded exception, and a retry will be attempted.
+                If None, defaults to the Table's default_per_request_timeout
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
         Returns:
             - a set of RowKeySamples the delimit contiguous sections of the table
         Raises:
@@ -780,7 +840,8 @@ class Table:
                in seconds. If it takes longer than this time to complete, the request
                will be cancelled with a DeadlineExceeded exception, and a retry will be
                attempted if within operation_timeout budget
-
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
         Raises:
              - DeadlineExceeded: raised after operation timeout
                  will be chained with a RetryExceptionGroup containing all
@@ -876,9 +937,8 @@ class Table:
                 in seconds. If it takes longer than this time to complete, the request
                 will be cancelled with a DeadlineExceeded exception, and a retry will
                 be attempted if within operation_timeout budget
-            - on_success: a callback function that will be called when each mutation
-                entry is confirmed to be applied successfully. Will be passed the
-                index and the entry itself.
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
         Raises:
             - MutationsExceptionGroup if one or more mutations fails
                 Contains details about any failed entries in .exceptions
@@ -910,8 +970,8 @@ class Table:
         *,
         true_case_mutations: Mutation | list[Mutation] | None = None,
         false_case_mutations: Mutation | list[Mutation] | None = None,
-        per_request_timeout: float | None = None,
         operation_timeout: int | float | None = 20,
+        per_request_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (),
     ) -> bool:
         """
@@ -941,6 +1001,13 @@ class Table:
                 `true_case_mutations is empty, and at most 100000.
             - operation_timeout: the time budget for the entire operation, in seconds.
                 Failed requests will not be retried.
+            - per_request_timeout: the time budget for an individual network request,
+                in seconds. If it takes longer than this time to complete, the request
+                will be cancelled with a DeadlineExceeded exception, and a retry will
+                be attempted if within operation_timeout budget
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
+                Defaults to no retries.
         Returns:
             - bool indicating whether the predicate was true or false
         Raises:
@@ -1006,8 +1073,8 @@ class Table:
         row_key: str | bytes,
         rules: ReadModifyWriteRule | list[ReadModifyWriteRule],
         *,
-        per_request_timeout: float | None = None,
         operation_timeout: int | float | None = 20,
+        per_request_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (),
     ) -> Row:
         """
@@ -1026,6 +1093,13 @@ class Table:
                 results of later ones.
            - operation_timeout: the time budget for the entire operation, in seconds.
                 Failed requests will not be retried.
+            - per_request_timeout: the time budget for an individual network request,
+                in seconds. If it takes longer than this time to complete, the request
+                will be cancelled with a DeadlineExceeded exception, and a retry will
+                be attempted if within operation_timeout budget
+            - retryable_exceptions: the set of grpc exceptions that will be retried
+                if the request fails within the operation_timeout budget.
+                Defaults to no retries.
         Returns:
             - Row: containing cell data that was modified as part of the
                 operation
