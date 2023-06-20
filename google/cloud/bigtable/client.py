@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import (
     cast,
     Any,
+    Callable,
     Optional,
     Set,
     Sequence,
@@ -32,6 +33,7 @@ import warnings
 import sys
 import random
 from itertools import chain
+from functools import partial
 
 from google.cloud.bigtable_v2.services.bigtable.client import BigtableClientMeta
 from google.cloud.bigtable_v2.services.bigtable.async_client import BigtableAsyncClient
@@ -41,6 +43,7 @@ from google.cloud.bigtable_v2.services.bigtable.transports.pooled_grpc_asyncio i
 )
 from google.cloud.bigtable_v2.types.bigtable import PingAndWarmRequest
 from google.cloud.client import ClientWithProject
+from google.api_core import retry_async as retries
 from google.api_core.exceptions import GoogleAPICallError
 from google.api_core import exceptions as core_exceptions
 from google.cloud.bigtable._read_rows import _ReadRowsOperation
@@ -56,7 +59,9 @@ from google.cloud.bigtable.exceptions import ShardedReadRowsExceptionGroup
 
 from google.cloud.bigtable.mutations import Mutation, RowMutationEntry
 from google.cloud.bigtable._mutate_rows import _MutateRowsOperation
-from google.cloud.bigtable._helpers import _enhanced_gapic_call
+from google.cloud.bigtable._helpers import _make_metadata
+from google.cloud.bigtable._helpers import _convert_retry_deadline
+from google.cloud.bigtable._helpers import _AttemptTimeoutGenerator
 
 from google.cloud.bigtable.read_modify_write_rules import ReadModifyWriteRule
 from google.cloud.bigtable.row_filters import RowFilter
@@ -365,7 +370,6 @@ class Table:
     ):
         """
         Initialize a Table instance
-
         Must be created within an async context (running event loop)
 
         Args:
@@ -542,7 +546,7 @@ class Table:
         row_key: str | bytes,
         *,
         row_filter: RowFilter | None = None,
-        operation_timeout: int | float | None = 60,
+        operation_timeout: int | float | None = 60,  # TODO: this won't ever use table default. This should only be for manual overrides
         attempt_timeout: int | float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
@@ -752,8 +756,8 @@ class Table:
             return [(s.row_key, s.offset_bytes) async for s in results]
 
         # prepare retryable
-        return await _enhanced_gapic_call(
-            self, execute_rpc, operation_timeout, attempt_timeout, retryable_exceptions
+        return await self._enhanced_gapic_call(
+            execute_rpc, operation_timeout, attempt_timeout, retryable_exceptions
         )
 
     def mutations_batcher(self, **kwargs) -> MutationsBatcher:
@@ -824,8 +828,7 @@ class Table:
             retryable_exceptions = ()
 
         # trigger rpc
-        await _enhanced_gapic_call(
-            self,
+        await self._enhanced_gapic_call(
             self.client._gapic_client.mutate_row,
             operation_timeout,
             attempt_timeout,
@@ -958,8 +961,7 @@ class Table:
         if predicate is not None and not isinstance(predicate, dict):
             predicate = predicate.to_dict()
         # trigger rpc
-        result = await _enhanced_gapic_call(
-            self,
+        result = await self._enhanced_gapic_call(
             self.client._gapic_client.check_and_mutate_row,
             operation_timeout,
             attempt_timeout,
@@ -1021,8 +1023,7 @@ class Table:
         # concert to dict representation
         rules_dict = [rule._to_dict() for rule in rules]
         # call gapic call with retries
-        result = await _enhanced_gapic_call(
-            self,
+        result = await self._enhanced_gapic_call(
             self.client._gapic_client.read_modify_write_row,
             operation_timeout,
             attempt_timeout,
@@ -1036,6 +1037,68 @@ class Table:
         )
         # construct Row from result
         return Row._from_pb(result.row)
+
+    def _enhanced_gapic_call(
+        self,
+        gapic_func: Callable[..., Any],
+        operation_timeout: float | None,
+        attempt_timeout: float | None,
+        retryable_exceptions: Sequence[Type[Exception]],
+        *,
+        retry_initial=0.01,
+        retry_multiplier=2,
+        retry_maximum=60,
+        **kwargs,
+    ):
+        """
+        Takes in a raw gapic function, and adds the following enhancements:
+          - retry logic
+          - metadata population
+          - attempt_timeouts that decrease as the operation_timeout nears
+          - errors raised as part of the retry loop are raised as a RetryExceptionGroup
+        """
+        # find proper timeout values
+        operation_timeout = operation_timeout or self.default_operation_timeout
+        attempt_timeout = attempt_timeout or self.default_attempt_timeout
+        if operation_timeout <= 0:
+            raise ValueError("operation_timeout must be greater than 0")
+        if attempt_timeout is not None and attempt_timeout <= 0:
+            raise ValueError("attempt_timeout must be greater than 0")
+        if attempt_timeout is not None and attempt_timeout > operation_timeout:
+            raise ValueError(
+                "attempt_timeout must not be greater than operation_timeout"
+            )
+        if attempt_timeout is None:
+            attempt_timeout = operation_timeout
+        # build retry
+        predicate = retries.if_exception_type(*retryable_exceptions)
+        transient_errors = []
+
+        def on_error_fn(exc):
+            if predicate(exc):
+                transient_errors.append(exc)
+
+        retry = retries.AsyncRetry(
+            predicate=predicate,
+            on_error=on_error_fn,
+            timeout=operation_timeout,
+            initial=retry_initial,
+            multiplier=retry_multiplier,
+            maximum=retry_maximum,
+        )
+        # create metadata
+        metadata = _make_metadata(self.table_name, self.app_profile_id)
+        # prepare timeout
+        timeout_obj = _AttemptTimeoutGenerator(attempt_timeout, operation_timeout)
+        # wrap the gapic function with retry logic
+        retryable_gapic = partial(
+            gapic_func, timeout=timeout_obj, retry=retry, metadata=metadata, **kwargs,
+        )
+        # convert RetryErrors from retry wrapper into DeadlineExceeded errors
+        deadline_wrapped = _convert_retry_deadline(
+            retryable_gapic, operation_timeout, transient_errors
+        )
+        return deadline_wrapped()
 
     async def close(self):
         """

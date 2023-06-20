@@ -13,14 +13,12 @@
 #
 from __future__ import annotations
 
-from typing import Callable, Sequence, Type, Any
+from typing import Callable, Any
 from inspect import iscoroutinefunction
 import time
-from functools import partial
 from functools import wraps
 
 from google.api_core import exceptions as core_exceptions
-from google.api_core import retry_async as retries
 from google.cloud.bigtable.exceptions import RetryExceptionGroup
 
 """
@@ -41,7 +39,7 @@ def _make_metadata(
     params_str = ",".join(params)
     return [("x-goog-request-params", params_str)]
 
-
+# TODO: combine with object
 def _attempt_timeout_generator(
     attempt_timeout: float | None, operation_timeout: float
 ):
@@ -114,69 +112,7 @@ def _convert_retry_deadline(
     return wrapper_async if iscoroutinefunction(func) else wrapper
 
 
-def _enhanced_gapic_call(
-    table,
-    gapic_func: Callable[..., Any],
-    operation_timeout: float | None,
-    attempt_timeout: float | None,
-    retryable_exceptions: Sequence[Type[Exception]],
-    *,
-    retry_initial=0.01,
-    retry_multiplier=2,
-    retry_maximum=60,
-    **kwargs,
-):
-    """
-    Helper function to wrap a gapic function with retry logic
-
-    Any errors that occur as part of the retry loop will be collected and
-    re-raised as a RetryExceptionGroup.
-    """
-    # find proper timeout values
-    operation_timeout = operation_timeout or table.default_operation_timeout
-    attempt_timeout = attempt_timeout or table.default_attempt_timeout
-    if operation_timeout <= 0:
-        raise ValueError("operation_timeout must be greater than 0")
-    if attempt_timeout is not None and attempt_timeout <= 0:
-        raise ValueError("attempt_timeout must be greater than 0")
-    if attempt_timeout is not None and attempt_timeout > operation_timeout:
-        raise ValueError(
-            "attempt_timeout must not be greater than operation_timeout"
-        )
-    if attempt_timeout is None:
-        attempt_timeout = operation_timeout
-    # build retry
-    predicate = retries.if_exception_type(*retryable_exceptions)
-    transient_errors = []
-
-    def on_error_fn(exc):
-        if predicate(exc):
-            transient_errors.append(exc)
-
-    retry = retries.AsyncRetry(
-        predicate=predicate,
-        on_error=on_error_fn,
-        timeout=operation_timeout,
-        initial=retry_initial,
-        multiplier=retry_multiplier,
-        maximum=retry_maximum,
-    )
-    # create metadata
-    metadata = _make_metadata(table.table_name, table.app_profile_id)
-    # prepare timeout
-    timeout_obj = _AttemptTimeoutReducer(attempt_timeout, operation_timeout)
-    # wrap the gapic function with retry logic
-    retryable_gapic = partial(
-        gapic_func, timeout=timeout_obj, retry=retry, metadata=metadata, **kwargs,
-    )
-    # convert RetryErrors from retry wrapper into DeadlineExceeded errors
-    deadline_wrapped = _convert_retry_deadline(
-        retryable_gapic, operation_timeout, transient_errors
-    )
-    return deadline_wrapped()
-
-
-class _AttemptTimeoutReducer(object):
+class _AttemptTimeoutGenerator(object):
     """
     Creates an _attempt_timeout_generator that will reduce the per attempt timeout value
     as the operation timeout approaches, and wraps it in an object that can be passed
