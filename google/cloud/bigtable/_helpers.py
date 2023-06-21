@@ -39,10 +39,9 @@ def _make_metadata(
     params_str = ",".join(params)
     return [("x-goog-request-params", params_str)]
 
+
 # TODO: combine with object
-def _attempt_timeout_generator(
-    attempt_timeout: float | None, operation_timeout: float
-):
+def _attempt_timeout_generator(attempt_timeout: float | None, operation_timeout: float):
     """
     Generator that yields the timeout value for each attempt of a retry loop.
 
@@ -132,3 +131,19 @@ class _AttemptTimeoutGenerator(object):
             return func(*args, **kwargs)
 
         return func_with_timeout
+
+
+def _validate_timeouts(
+    operation_timeout: float, attempt_timeout: float | None, allow_none: bool = False
+):
+    if operation_timeout <= 0:
+        raise ValueError("operation_timeout must be greater than 0")
+    if not allow_none and attempt_timeout is None:
+        raise ValueError("attempt_timeout must not be None")
+    elif attempt_timeout is not None:
+        if attempt_timeout <= 0:
+            raise ValueError("attempt_timeout must be greater than 0")
+        if attempt_timeout > operation_timeout:
+            raise ValueError(
+                "attempt_timeout must not be greater than operation_timeout"
+            )

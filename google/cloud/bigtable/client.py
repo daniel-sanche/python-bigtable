@@ -62,6 +62,7 @@ from google.cloud.bigtable._mutate_rows import _MutateRowsOperation
 from google.cloud.bigtable._helpers import _make_metadata
 from google.cloud.bigtable._helpers import _convert_retry_deadline
 from google.cloud.bigtable._helpers import _AttemptTimeoutGenerator
+from google.cloud.bigtable._helpers import _validate_timeouts
 
 from google.cloud.bigtable.read_modify_write_rules import ReadModifyWriteRule
 from google.cloud.bigtable.row_filters import RowFilter
@@ -365,7 +366,11 @@ class Table:
         table_id: str,
         app_profile_id: str | None = None,
         *,
-        default_operation_timeout: float = 600,
+        default_read_rows_operation_timeout: float = 600,
+        default_read_rows_attempt_timeout: float | None = None,
+        default_mutate_rows_operation_timeout: float = 600,
+        default_mutate_rows_attempt_timeout: float | None = None,
+        default_operation_timeout: float = 60,
         default_attempt_timeout: float | None = None,
     ):
         """
@@ -387,17 +392,19 @@ class Table:
           - RuntimeError if called outside of an async context (no running event loop)
         """
         # validate timeouts
-        if default_operation_timeout <= 0:
-            raise ValueError("default_operation_timeout must be greater than 0")
-        if default_attempt_timeout is not None and default_attempt_timeout <= 0:
-            raise ValueError("default_attempt_timeout must be greater than 0")
-        if (
-            default_attempt_timeout is not None
-            and default_attempt_timeout > default_operation_timeout
-        ):
-            raise ValueError(
-                "default_attempt_timeout must be less than default_operation_timeout"
-            )
+        _validate_timeouts(
+            default_operation_timeout, default_attempt_timeout, allow_none=True
+        )
+        _validate_timeouts(
+            default_read_rows_operation_timeout,
+            default_read_rows_attempt_timeout,
+            allow_none=True,
+        )
+        _validate_timeouts(
+            default_mutate_rows_operation_timeout,
+            default_mutate_rows_attempt_timeout,
+            allow_none=True,
+        )
         self.client = client
         self.instance_id = instance_id
         self.instance_name = self.client._gapic_client.instance_path(
@@ -411,6 +418,10 @@ class Table:
 
         self.default_operation_timeout = default_operation_timeout
         self.default_attempt_timeout = default_attempt_timeout
+        self.default_read_rows_operation_timeout = default_read_rows_operation_timeout
+        self.default_read_rows_attempt_timeout = default_read_rows_attempt_timeout
+        self.default_mutate_rows_operation_timeout = default_mutate_rows_operation_timeout
+        self.default_mutate_rows_attempt_timeout = default_mutate_rows_attempt_timeout
 
         # raises RuntimeError if called outside of an async context (no running event loop)
         try:
@@ -462,19 +473,16 @@ class Table:
             - IdleTimeout: if iterator was abandoned
         """
 
-        operation_timeout = operation_timeout or self.default_operation_timeout
-        attempt_timeout = attempt_timeout or self.default_attempt_timeout
+        operation_timeout = (
+            operation_timeout or self.default_read_rows_operation_timeout
+        )
+        attempt_timeout = (
+            attempt_timeout
+            or self.default_read_rows_attempt_timeout
+            or operation_timeout
+        )
+        _validate_timeouts(operation_timeout, attempt_timeout)
 
-        if operation_timeout <= 0:
-            raise ValueError("operation_timeout must be greater than 0")
-        if attempt_timeout is not None and attempt_timeout <= 0:
-            raise ValueError("attempt_timeout must be greater than 0")
-        if attempt_timeout is not None and attempt_timeout > operation_timeout:
-            raise ValueError(
-                "attempt_timeout must not be greater than operation_timeout"
-            )
-        if attempt_timeout is None:
-            attempt_timeout = operation_timeout
         request = query._to_dict() if isinstance(query, ReadRowsQuery) else query
         request["table_name"] = self.table_name
         if self.app_profile_id:
@@ -546,7 +554,7 @@ class Table:
         row_key: str | bytes,
         *,
         row_filter: RowFilter | None = None,
-        operation_timeout: int | float | None = 60,  # TODO: this won't ever use table default. This should only be for manual overrides
+        operation_timeout: int | float | None = None,
         attempt_timeout: int | float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
@@ -575,6 +583,11 @@ class Table:
         Returns:
             - the individual row requested, or None if it does not exist
         """
+        operation_timeout = operation_timeout or self.default_operation_timeout
+        attempt_timeout = (
+            attempt_timeout or self.default_attempt_timeout or operation_timeout
+        )
+
         if row_key is None:
             raise ValueError("row_key must be string or bytes")
         query = ReadRowsQuery(row_keys=row_key, row_filter=row_filter, limit=1)
@@ -666,7 +679,7 @@ class Table:
         self,
         row_key: str | bytes,
         *,
-        operation_timeout: int | float | None = 60,
+        operation_timeout: int | float | None = None,
         attempt_timeout: int | float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
@@ -694,19 +707,17 @@ class Table:
         Returns:
             - a bool indicating whether the row exists
         """
-        if row_key is None:
-            raise ValueError("row_key must be string or bytes")
         strip_filter = StripValueTransformerFilter(flag=True)
         limit_filter = CellsRowLimitFilter(1)
         chain_filter = RowFilterChain(filters=[limit_filter, strip_filter])
-        query = ReadRowsQuery(row_keys=row_key, limit=1, row_filter=chain_filter)
-        results = await self.read_rows(
-            query,
+        result = await self.read_row(
+            row_key,
+            row_filter=chain_filter,
             operation_timeout=operation_timeout,
             attempt_timeout=attempt_timeout,
             retryable_exceptions=retryable_exceptions,
         )
-        return len(results) > 0
+        return result is not None
 
     async def sample_row_keys(
         self,
@@ -745,6 +756,11 @@ class Table:
         Raises:
             - GoogleAPICallError: if the sample_row_keys request fails
         """
+        operation_timeout = operation_timeout or self.default_operation_timeout
+        attempt_timeout = (
+            attempt_timeout or self.default_attempt_timeout or operation_timeout
+        )
+
         async def execute_rpc(timeout, metadata, **kwargs):
             results = await self.client._gapic_client.sample_row_keys(
                 table_name=self.table_name,
@@ -777,7 +793,7 @@ class Table:
         row_key: str | bytes,
         mutations: list[Mutation] | Mutation,
         *,
-        operation_timeout: float | None = 60,
+        operation_timeout: float | None = None,
         attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
@@ -813,6 +829,11 @@ class Table:
              - GoogleAPIError: raised on non-idempotent operations that cannot be
                  safely retried.
         """
+        operation_timeout = operation_timeout or self.default_operation_timeout
+        attempt_timeout = (
+            attempt_timeout or self.default_attempt_timeout or operation_timeout
+        )
+
         if isinstance(row_key, str):
             row_key = row_key.encode("utf-8")
         request = {"table_name": self.table_name, "row_key": row_key}
@@ -840,7 +861,7 @@ class Table:
         self,
         mutation_entries: list[RowMutationEntry],
         *,
-        operation_timeout: float | None = 60,
+        operation_timeout: float | None = None,
         attempt_timeout: float | None = None,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
@@ -877,8 +898,15 @@ class Table:
             - MutationsExceptionGroup if one or more mutations fails
                 Contains details about any failed entries in .exceptions
         """
-        operation_timeout = operation_timeout or self.default_operation_timeout
-        attempt_timeout = attempt_timeout or self.default_attempt_timeout
+        operation_timeout = (
+            operation_timeout or self.default_mutate_rows_operation_timeout
+        )
+        attempt_timeout = (
+            attempt_timeout
+            or self.default_mutate_rows_attempt_timeout
+            or operation_timeout
+        )
+        _validate_timeouts(operation_timeout, attempt_timeout)
 
         if operation_timeout <= 0:
             raise ValueError("operation_timeout must be greater than 0")
@@ -947,6 +975,11 @@ class Table:
         Raises:
             - GoogleAPIError exceptions from grpc call
         """
+        operation_timeout = operation_timeout or self.default_operation_timeout
+        attempt_timeout = (
+            attempt_timeout or self.default_attempt_timeout or operation_timeout
+        )
+
         row_key = row_key.encode("utf-8") if isinstance(row_key, str) else row_key
         if true_case_mutations is not None and not isinstance(
             true_case_mutations, list
@@ -1015,6 +1048,11 @@ class Table:
         Raises:
             - GoogleAPIError exceptions from grpc call
         """
+        operation_timeout = operation_timeout or self.default_operation_timeout
+        attempt_timeout = (
+            attempt_timeout or self.default_attempt_timeout or operation_timeout
+        )
+
         row_key = row_key.encode("utf-8") if isinstance(row_key, str) else row_key
         if rules is not None and not isinstance(rules, list):
             rules = [rules]
@@ -1033,7 +1071,7 @@ class Table:
                 "table_name": self.table_name,
                 "row_key": row_key,
                 "app_profile_id": self.app_profile_id,
-            }
+            },
         )
         # construct Row from result
         return Row._from_pb(result.row)
@@ -1041,8 +1079,8 @@ class Table:
     def _enhanced_gapic_call(
         self,
         gapic_func: Callable[..., Any],
-        operation_timeout: float | None,
-        attempt_timeout: float | None,
+        operation_timeout: float,
+        attempt_timeout: float,
         retryable_exceptions: Sequence[Type[Exception]],
         *,
         retry_initial=0.01,
@@ -1057,19 +1095,7 @@ class Table:
           - attempt_timeouts that decrease as the operation_timeout nears
           - errors raised as part of the retry loop are raised as a RetryExceptionGroup
         """
-        # find proper timeout values
-        operation_timeout = operation_timeout or self.default_operation_timeout
-        attempt_timeout = attempt_timeout or self.default_attempt_timeout
-        if operation_timeout <= 0:
-            raise ValueError("operation_timeout must be greater than 0")
-        if attempt_timeout is not None and attempt_timeout <= 0:
-            raise ValueError("attempt_timeout must be greater than 0")
-        if attempt_timeout is not None and attempt_timeout > operation_timeout:
-            raise ValueError(
-                "attempt_timeout must not be greater than operation_timeout"
-            )
-        if attempt_timeout is None:
-            attempt_timeout = operation_timeout
+        _validate_timeouts(operation_timeout, attempt_timeout)
         # build retry
         predicate = retries.if_exception_type(*retryable_exceptions)
         transient_errors = []
@@ -1092,7 +1118,11 @@ class Table:
         timeout_obj = _AttemptTimeoutGenerator(attempt_timeout, operation_timeout)
         # wrap the gapic function with retry logic
         retryable_gapic = partial(
-            gapic_func, timeout=timeout_obj, retry=retry, metadata=metadata, **kwargs,
+            gapic_func,
+            timeout=timeout_obj,
+            retry=retry,
+            metadata=metadata,
+            **kwargs,
         )
         # convert RetryErrors from retry wrapper into DeadlineExceeded errors
         deadline_wrapped = _convert_retry_deadline(
