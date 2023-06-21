@@ -125,14 +125,12 @@ class _MutateRowsOperation:
                     all_errors, len(self.mutations)
                 )
 
-    async def _run_attempt(self, *args, **kwargs):
+    async def _run_attempt(self, **gapic_kwargs):
         """
         Run a single attempt of the mutate_rows rpc.
 
         Args:
-          - args: arguments to pass through to the mutate_rows call
-              should be populated by _enhance_gapic_call
-          - kwargs: keyword arguments to pass through to the mutate_rows call
+          - gapic_kwargs: keyword arguments to pass through to the mutate_rows call
               should be populated by _enhance_gapic_call
         Raises:
           - _MutateRowsIncomplete: if there are failed mutations eligible for
@@ -154,9 +152,8 @@ class _MutateRowsOperation:
         try:
             result_generator = await self._gapic_fn(
                 entries=request_entries,  # type: ignore
-                *args,
                 retry=None,
-                **kwargs,
+                **gapic_kwargs,
             )
             async for result_list in result_generator:
                 for result in result_list.entries:

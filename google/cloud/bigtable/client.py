@@ -482,11 +482,7 @@ class Table:
             or operation_timeout
         )
         _validate_timeouts(operation_timeout, attempt_timeout)
-
         request = query._to_dict() if isinstance(query, ReadRowsQuery) else query
-        request["table_name"] = self.table_name
-        if self.app_profile_id:
-            request["app_profile_id"] = self.app_profile_id
 
         # read_rows smart retries is implemented using a series of iterators:
         # - client.read_rows: outputs raw ReadRowsResponse objects from backend. Has attempt_timeout
@@ -494,10 +490,12 @@ class Table:
         # - ReadRowsOperation.retryable_merge_rows: adds retries, caching, revised requests, attempt_timeout
         # - ReadRowsIterator: adds idle_timeout, moves stats out of stream and into attribute
         row_merger = _ReadRowsOperation(
-            request,
-            self.client._gapic_client,
-            operation_timeout=operation_timeout,
-            attempt_timeout=attempt_timeout,
+            self,
+            request.get("rows", None),
+            operation_timeout,
+            attempt_timeout,
+            row_limit=request.get("rows_limit", None),
+            row_filter=request.get("filter", None),
             retryable_exceptions=retryable_exceptions,
         )
         output_generator = ReadRowsIterator(row_merger)
