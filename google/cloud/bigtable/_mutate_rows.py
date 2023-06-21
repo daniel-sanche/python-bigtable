@@ -14,20 +14,13 @@
 #
 from __future__ import annotations
 
-from typing import Sequence, Type, TYPE_CHECKING
-import functools
+from typing import Coroutine, Sequence, Type, TYPE_CHECKING
 
 from google.api_core import exceptions as core_exceptions
 from google.api_core import retry_async as retries
 import google.cloud.bigtable.exceptions as bt_exceptions
-from google.cloud.bigtable._helpers import _make_metadata
-from google.cloud.bigtable._helpers import _convert_retry_deadline
-from google.cloud.bigtable._helpers import _AttemptTimeoutGenerator
 
 if TYPE_CHECKING:
-    from google.cloud.bigtable_v2.services.bigtable.async_client import (
-        BigtableAsyncClient,
-    )
     from google.cloud.bigtable.client import Table
     from google.cloud.bigtable.mutations import RowMutationEntry
 
@@ -53,11 +46,10 @@ class _MutateRowsOperation:
 
     def __init__(
         self,
-        gapic_client: "BigtableAsyncClient",
         table: "Table",
         mutation_entries: list["RowMutationEntry"],
         operation_timeout: float,
-        attempt_timeout: float | None,
+        attempt_timeout: float,
         retryable_exceptions: Sequence[Type[Exception]] = (
             core_exceptions.DeadlineExceeded,
             core_exceptions.ServiceUnavailable,
@@ -72,39 +64,30 @@ class _MutateRowsOperation:
           - attempt_timeout: the timeoutto use for each mutate_rows attempt, in seconds.
               If not specified, the request will run until operation_timeout is reached.
         """
-        # create partial function to pass to trigger rpc call
-        metadata = _make_metadata(table.table_name, table.app_profile_id)
-        self._gapic_fn = functools.partial(
-            gapic_client.mutate_rows,
-            table_name=table.table_name,
-            app_profile_id=table.app_profile_id,
-            metadata=metadata,
-            retry=None,
-        )
-        # create predicate for determining which errors are retryable
-        self.is_retryable = retries.if_exception_type(
+        # add _MutateRowsIncomplete to the list of retryable exceptions, for requests with partial results
+        retryable_exceptions = [
             # Entry level errors
             _MutateRowsIncomplete,
             # RPC level errors
             *retryable_exceptions,
-        )
-        # build retryable operation
-        retry = retries.AsyncRetry(
-            predicate=self.is_retryable,
-            timeout=operation_timeout,
-            initial=0.01,
-            multiplier=2,
-            maximum=60,
-        )
-        retry_wrapped = retry(self._run_attempt)
-        self._operation = _convert_retry_deadline(retry_wrapped, operation_timeout)
-        # initialize state
-        self.timeout_generator = _AttemptTimeoutGenerator(
-            attempt_timeout, operation_timeout
-        )
+        ]
+        # set up operation state
+        self._is_retryable = retries.if_exception_type(*retryable_exceptions)
+        self._gapic_fn = table.client._gapic_client.mutate_rows
         self.mutations = mutation_entries
         self.remaining_indices = list(range(len(self.mutations)))
         self.errors: dict[int, list[Exception]] = {}
+        # build the operation retryable call
+        self._operation = table._enhanced_gapic_call(self._run_attempt, operation_timeout, attempt_timeout, retryable_exceptions, pass_retry=False)
+
+    def __call__(self) -> Coroutine[None, None, None]:
+        """
+        Start the operation, and run until completion
+
+        Raises:
+          - MutationsExceptionGroup: if any mutations failed
+        """
+        return self.start()
 
     async def start(self):
         """
@@ -115,7 +98,7 @@ class _MutateRowsOperation:
         """
         try:
             # trigger mutate_rows
-            await self._operation()
+            await self._operation
         except Exception as exc:
             # exceptions raised by retryable are added to the list of exceptions for all unfinalized mutations
             incomplete_indices = self.remaining_indices.copy()
@@ -142,10 +125,15 @@ class _MutateRowsOperation:
                     all_errors, len(self.mutations)
                 )
 
-    async def _run_attempt(self):
+    async def _run_attempt(self, *args, **kwargs):
         """
         Run a single attempt of the mutate_rows rpc.
 
+        Args:
+          - args: arguments to pass through to the mutate_rows call
+              should be populated by _enhance_gapic_call
+          - kwargs: keyword arguments to pass through to the mutate_rows call
+              should be populated by _enhance_gapic_call
         Raises:
           - _MutateRowsIncomplete: if there are failed mutations eligible for
               retry after the attempt is complete
@@ -165,8 +153,10 @@ class _MutateRowsOperation:
         # make gapic request
         try:
             result_generator = await self._gapic_fn(
-                timeout=next(self.timeout_generator),
-                entries=request_entries,
+                entries=request_entries,  # type: ignore
+                *args,
+                retry=None,
+                **kwargs,
             )
             async for result_list in result_generator:
                 for result in result_list.entries:
@@ -208,7 +198,7 @@ class _MutateRowsOperation:
         self.errors.setdefault(idx, []).append(exc)
         if (
             entry.is_idempotent()
-            and self.is_retryable(exc)
+            and self._is_retryable(exc)
             and idx not in self.remaining_indices
         ):
             self.remaining_indices.append(idx)

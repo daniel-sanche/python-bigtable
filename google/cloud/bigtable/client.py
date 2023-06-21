@@ -908,22 +908,13 @@ class Table:
         )
         _validate_timeouts(operation_timeout, attempt_timeout)
 
-        if operation_timeout <= 0:
-            raise ValueError("operation_timeout must be greater than 0")
-        if attempt_timeout is not None and attempt_timeout <= 0:
-            raise ValueError("attempt_timeout must be greater than 0")
-        if attempt_timeout is not None and attempt_timeout > operation_timeout:
-            raise ValueError("attempt_timeout must be less than operation_timeout")
-
-        operation = _MutateRowsOperation(
-            self.client._gapic_client,
+        await _MutateRowsOperation(
             self,
             mutation_entries,
             operation_timeout,
             attempt_timeout,
             retryable_exceptions=retryable_exceptions,
-        )
-        await operation.start()
+        )()
 
     async def check_and_mutate_row(
         self,
@@ -1086,6 +1077,7 @@ class Table:
         retry_initial=0.01,
         retry_multiplier=2,
         retry_maximum=60,
+        pass_retry=True,
         **kwargs,
     ):
         """
@@ -1094,6 +1086,9 @@ class Table:
           - metadata population
           - attempt_timeouts that decrease as the operation_timeout nears
           - errors raised as part of the retry loop are raised as a RetryExceptionGroup
+        Args:
+          - pass_retry: if True, retry will be passed in to gapic_func, so it can be handled
+              by gapic layer. If False, retry will be wrapped around gapic_func manually.
         """
         _validate_timeouts(operation_timeout, attempt_timeout)
         # build retry
@@ -1117,13 +1112,18 @@ class Table:
         # prepare timeout
         timeout_obj = _AttemptTimeoutGenerator(attempt_timeout, operation_timeout)
         # wrap the gapic function with retry logic
+        extra_kwargs = {"metadata": metadata, "timeout": timeout_obj, "table_name": self.table_name}
+        if self.app_profile_id is not None:
+            extra_kwargs["app_profile_id"] = self.app_profile_id
+        if pass_retry:
+            extra_kwargs["retry"] = retry
         retryable_gapic = partial(
             gapic_func,
-            timeout=timeout_obj,
-            retry=retry,
-            metadata=metadata,
+            **extra_kwargs,
             **kwargs,
         )
+        if not pass_retry:
+            retryable_gapic = retry(retryable_gapic)
         # convert RetryErrors from retry wrapper into DeadlineExceeded errors
         deadline_wrapped = _convert_retry_deadline(
             retryable_gapic, operation_timeout, transient_errors

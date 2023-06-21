@@ -35,7 +35,6 @@ class TestMutateRowsOperation:
 
     def _make_one(self, *args, **kwargs):
         if not args:
-            kwargs["gapic_client"] = kwargs.pop("gapic_client", mock.Mock())
             kwargs["table"] = kwargs.pop("table", AsyncMock())
             kwargs["mutation_entries"] = kwargs.pop("mutation_entries", [])
             kwargs["operation_timeout"] = kwargs.pop("operation_timeout", 5)
@@ -70,15 +69,15 @@ class TestMutateRowsOperation:
         from google.api_core.exceptions import DeadlineExceeded
         from google.api_core.exceptions import ServiceUnavailable
 
-        client = mock.Mock()
         table = mock.Mock()
         entries = [mock.Mock(), mock.Mock()]
         operation_timeout = 0.05
         attempt_timeout = 0.01
         instance = self._make_one(
-            client, table, entries, operation_timeout, attempt_timeout
+            table, entries, operation_timeout, attempt_timeout
         )
         # running gapic_fn should trigger a client call
+        client = table.client._gapic_client
         assert client.mutate_rows.call_count == 0
         instance._gapic_fn()
         assert client.mutate_rows.call_count == 1
