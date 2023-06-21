@@ -40,29 +40,6 @@ def _make_metadata(
     return [("x-goog-request-params", params_str)]
 
 
-# TODO: combine with object
-def _attempt_timeout_generator(attempt_timeout: float | None, operation_timeout: float):
-    """
-    Generator that yields the timeout value for each attempt of a retry loop.
-
-    Will return attempt_timeout until the operation_timeout is approached,
-    at which point it will return the remaining time in the operation_timeout.
-
-    Args:
-      - attempt_timeout: The timeout value to use for each request, in seconds.
-            If None, the operation_timeout will be used for each request.
-      - operation_timeout: The timeout value to use for the entire operationm in seconds.
-    Yields:
-      - The timeout value to use for the next request, in seonds
-    """
-    attempt_timeout = (
-        attempt_timeout if attempt_timeout is not None else operation_timeout
-    )
-    deadline = operation_timeout + time.monotonic()
-    while True:
-        yield max(0, min(attempt_timeout, deadline - time.monotonic()))
-
-
 def _convert_retry_deadline(
     func: Callable[..., Any],
     timeout_value: float | None = None,
@@ -113,21 +90,45 @@ def _convert_retry_deadline(
 
 class _AttemptTimeoutGenerator(object):
     """
-    Creates an _attempt_timeout_generator that will reduce the per attempt timeout value
-    as the operation timeout approaches, and wraps it in an object that can be passed
-    in to gapic functions as the timeout parameter.
+    Generator that yields the timeout value for each attempt of a retry loop.
+
+    Will return attempt_timeout until the operation_timeout is approached,
+    at which point it will return the remaining time in the operation_timeout.
+
+    Can be used as a generator, or as an `api_core.Timeout` object, for use
+    with gapic retry functions. In the latter case, the object will be called
+    to wrap a function with the current timeout value.
+
+    Args:
+      - attempt_timeout: The timeout value to use for each request, in seconds.
+            If None, the operation_timeout will be used for each request.
+      - operation_timeout: The timeout value to use for the entire operationm in seconds.
+    Yields:
+      - The timeout value to use for the next request, in seonds
     """
 
-    def __init__(self, request_timeout, operation_timeout):
-        self._timeout_generator = _attempt_timeout_generator(
-            request_timeout, operation_timeout
+    def __init__(self, attempt_timeout: float | None, operation_timeout: float):
+        attempt_timeout = (
+            attempt_timeout if attempt_timeout is not None else operation_timeout
         )
+        self._operation_timeout : float = operation_timeout
+        self._attempt_timeout : float = attempt_timeout
+        self._deadline : float | None = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._deadline is None:
+            # first call. Create deadline
+            self._deadline = time.monotonic() + self._operation_timeout
+        return max(0, min(self._attempt_timeout, self._deadline - time.monotonic()))
 
     def __call__(self, func):
         @wraps(func)
         def func_with_timeout(*args, **kwargs):
             """Wrapped function that adds timeout."""
-            kwargs["timeout"] = next(self._timeout_generator)
+            kwargs["timeout"] = next(self)
             return func(*args, **kwargs)
 
         return func_with_timeout

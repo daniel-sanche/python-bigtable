@@ -39,7 +39,7 @@ from google.cloud.bigtable.exceptions import _RowSetComplete
 from google.api_core import retry_async as retries
 from google.api_core import exceptions as core_exceptions
 from google.cloud.bigtable._helpers import _make_metadata
-from google.cloud.bigtable._helpers import _attempt_timeout_generator
+from google.cloud.bigtable._helpers import _AttemptTimeoutGenerator
 
 """
 This module provides a set of classes for merging ReadRowsResponse chunks
@@ -96,7 +96,7 @@ class _ReadRowsOperation(AsyncIterable[Row]):
         self._request = request
         self.operation_timeout = operation_timeout
         # use generator to lower per-attempt timeout as we approach operation_timeout deadline
-        attempt_timeout_gen = _attempt_timeout_generator(
+        attempt_timeout_gen = _AttemptTimeoutGenerator(
             attempt_timeout, operation_timeout
         )
         row_limit = request.get("rows_limit", 0)

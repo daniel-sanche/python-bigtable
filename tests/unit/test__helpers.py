@@ -53,7 +53,7 @@ class TestAttemptTimeoutGenerator:
         timestamp_start = 123
         with mock.patch("time.monotonic") as mock_monotonic:
             mock_monotonic.return_value = timestamp_start
-            generator = _helpers._attempt_timeout_generator(request_t, operation_t)
+            generator = _helpers._AttemptTimeoutGenerator(request_t, operation_t)
             for val in expected_list:
                 mock_monotonic.return_value += 1
                 assert next(generator) == val
@@ -77,7 +77,7 @@ class TestAttemptTimeoutGenerator:
         timestamp_start = 123
         with mock.patch("time.monotonic") as mock_monotonic:
             mock_monotonic.return_value = timestamp_start
-            generator = _helpers._attempt_timeout_generator(request_t, operation_t)
+            generator = _helpers._AttemptTimeoutGenerator(request_t, operation_t)
             assert next(generator) == expected
             # value should not change without time.monotonic changing
             assert next(generator) == expected
@@ -87,7 +87,7 @@ class TestAttemptTimeoutGenerator:
         from time import sleep
 
         operation_timeout = 1
-        generator = _helpers._attempt_timeout_generator(None, operation_timeout)
+        generator = _helpers._AttemptTimeoutGenerator(None, operation_timeout)
         expected_value = operation_timeout
         sleep_time = 0.1
         for i in range(3):

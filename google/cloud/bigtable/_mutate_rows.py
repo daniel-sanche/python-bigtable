@@ -22,7 +22,7 @@ from google.api_core import retry_async as retries
 import google.cloud.bigtable.exceptions as bt_exceptions
 from google.cloud.bigtable._helpers import _make_metadata
 from google.cloud.bigtable._helpers import _convert_retry_deadline
-from google.cloud.bigtable._helpers import _attempt_timeout_generator
+from google.cloud.bigtable._helpers import _AttemptTimeoutGenerator
 
 if TYPE_CHECKING:
     from google.cloud.bigtable_v2.services.bigtable.async_client import (
@@ -99,7 +99,7 @@ class _MutateRowsOperation:
         retry_wrapped = retry(self._run_attempt)
         self._operation = _convert_retry_deadline(retry_wrapped, operation_timeout)
         # initialize state
-        self.timeout_generator = _attempt_timeout_generator(
+        self.timeout_generator = _AttemptTimeoutGenerator(
             attempt_timeout, operation_timeout
         )
         self.mutations = mutation_entries
