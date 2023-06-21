@@ -761,19 +761,14 @@ class Table:
             attempt_timeout or self.default_attempt_timeout or operation_timeout
         )
 
-        async def execute_rpc(timeout, metadata, **kwargs):
+        async def execute_rpc(**kwargs):
             results = await self.client._gapic_client.sample_row_keys(
-                table_name=self.table_name,
-                app_profile_id=self.app_profile_id,
-                timeout=timeout,
-                metadata=metadata,
-                retry=None,
+                **kwargs,
             )
             return [(s.row_key, s.offset_bytes) async for s in results]
-
         # prepare retryable
         return await self._enhanced_gapic_call(
-            execute_rpc, operation_timeout, attempt_timeout, retryable_exceptions
+            execute_rpc, operation_timeout, attempt_timeout, retryable_exceptions, pass_retry=False
         )
 
     def mutations_batcher(self, **kwargs) -> MutationsBatcher:
@@ -836,13 +831,8 @@ class Table:
 
         if isinstance(row_key, str):
             row_key = row_key.encode("utf-8")
-        request = {"table_name": self.table_name, "row_key": row_key}
-        if self.app_profile_id:
-            request["app_profile_id"] = self.app_profile_id
-
-        if isinstance(mutations, Mutation):
+        if not isinstance(mutations, list):
             mutations = [mutations]
-        request["mutations"] = [mutation._to_dict() for mutation in mutations]
 
         if not all(mutation.is_idempotent() for mutation in mutations):
             # contains non-idempotent mutations. Do not retry
@@ -854,7 +844,8 @@ class Table:
             operation_timeout,
             attempt_timeout,
             retryable_exceptions,
-            request=request,
+            row_key=row_key,
+            mutations=[mutation._to_dict() for mutation in mutations],
         )
 
     async def bulk_mutate_rows(
@@ -906,7 +897,6 @@ class Table:
             or self.default_mutate_rows_attempt_timeout
             or operation_timeout
         )
-        _validate_timeouts(operation_timeout, attempt_timeout)
 
         await _MutateRowsOperation(
             self,
@@ -990,14 +980,10 @@ class Table:
             operation_timeout,
             attempt_timeout,
             retryable_exceptions,
-            request={
-                "predicate_filter": predicate,
-                "true_mutations": true_case_dict,
-                "false_mutations": false_case_dict,
-                "table_name": self.table_name,
-                "row_key": row_key,
-                "app_profile_id": self.app_profile_id,
-            },
+            row_key=row_key,
+            predicate_filter=predicate,
+            true_mutations=true_case_dict,
+            false_mutations=false_case_dict,
         )
         return result.predicate_matched
 
@@ -1057,12 +1043,8 @@ class Table:
             operation_timeout,
             attempt_timeout,
             retryable_exceptions,
-            request={
-                "rules": rules_dict,
-                "table_name": self.table_name,
-                "row_key": row_key,
-                "app_profile_id": self.app_profile_id,
-            },
+            rules=rules_dict,
+            row_key=row_key,
         )
         # construct Row from result
         return Row._from_pb(result.row)
