@@ -196,7 +196,6 @@ class _ReadRowsOperationAsync:
                     if not current_key:
                         raise InvalidChunk("commit row with no prior chunks")
                     yield current_key, q
-                    q.clear()
                     self._last_yielded_row_key = current_key
                     current_key = None
         if q:
@@ -217,10 +216,8 @@ class _ReadRowsOperationAsync:
                 # shared per cell storage
                 family: str | None = None
                 qualifier: bytes | None = None
-                n_chunks = len(row_chunks)
-                i = 0
-                while i < n_chunks:
-                    c = row_chunks[i]
+                while row_chunks:
+                    c = row_chunks.popleft()
                     k = c.row_key
                     f = c.family_name.value
                     q = c.qualifier.value if c.HasField("qualifier") else None
@@ -247,8 +244,7 @@ class _ReadRowsOperationAsync:
                         buffer = [value]
                         while c.value_size > 0:
                             # throws when premature end
-                            i += 1
-                            c = row_chunks[i]
+                            c = row_chunks.popleft()
 
                             t = c.timestamp_micros
                             cl = c.labels
@@ -279,7 +275,6 @@ class _ReadRowsOperationAsync:
                     cells.append(
                         Cell(value, row_key, family, qualifier, ts, list(labels))
                     )
-                    i += 1
                 yield Row(row_key, cells)
         except IndexError:
             raise InvalidChunk("invalid chunk sequence")
