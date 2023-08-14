@@ -138,20 +138,22 @@ class _ReadRowsOperationAsync:
             if self._remaining_count == 0:
                 return self.merge_rows(None)
         # create and return a new row merger
-        gapic_stream = self.table.client._gapic_client.read_rows(
-            self.request,
-            timeout=next(self.attempt_timeout_gen),
-            metadata=self._metadata,
+        return self.merge_rows(
+            self.table.client._gapic_client.read_rows(
+                self.request,
+                timeout=next(self.attempt_timeout_gen),
+                metadata=self._metadata,
+            )
         )
-        chunked_stream = self.chunk_stream(gapic_stream)
-        return self.merge_rows(chunked_stream)
 
-    async def chunk_stream(
+    async def merge_rows(
         self, stream: Awaitable[AsyncIterable[ReadRowsResponsePB]]
     ) -> AsyncGenerator[ReadRowsResponsePB.CellChunk, None]:
         """
         process chunks out of raw read_rows stream
         """
+        if stream is None:
+            return
         q = deque()
         async for resp in await stream:
             # extract proto from proto-plus wrapper
@@ -195,89 +197,152 @@ class _ReadRowsOperationAsync:
                     # update row state after each commit
                     if not current_key:
                         raise InvalidChunk("commit row with no prior chunks")
-                    yield current_key, q
+                    cells : list[Cell] = []
+                    # shared per cell storage
+                    family: str | None = None
+                    qualifier: bytes | None = None
+                    while q:
+                        c = q.popleft()
+                        k = c.row_key
+                        f = c.family_name.value
+                        qual = c.qualifier.value if c.HasField("qualifier") else None
+
+                        if k and k != current_key:
+                            raise InvalidChunk("unexpected new row key")
+                        if f:
+                            family = f
+                            if qual is not None:
+                                qualifier = qual
+                            else:
+                                raise InvalidChunk("new family without qualifier")
+                        elif qual is not None:
+                            if family is None:
+                                raise InvalidChunk("new qualifier without family")
+                            qualifier = qual
+
+                        ts = c.timestamp_micros
+                        labels = c.labels if c.labels else []
+                        value = c.value
+
+                        # merge split cells
+                        if c.value_size > 0:
+                            buffer = [value]
+                            while c.value_size > 0:
+                                # throws when premature end
+                                c = q.popleft()
+
+                                t = c.timestamp_micros
+                                cl = c.labels
+                                k = c.row_key
+                                if (
+                                    c.HasField("family_name")
+                                    and c.family_name.value != family
+                                ):
+                                    raise InvalidChunk("family changed mid cell")
+                                if (
+                                    c.HasField("qualifier")
+                                    and c.qualifier.value != qualifier
+                                ):
+                                    raise InvalidChunk("qualifier changed mid cell")
+                                if t and t != ts:
+                                    raise InvalidChunk("timestamp changed mid cell")
+                                if cl and cl != labels:
+                                    raise InvalidChunk("labels changed mid cell")
+                                if k and k != current_key:
+                                    raise InvalidChunk("row key changed mid cell")
+
+                                    buffer.append(c.value)
+                                value = b"".join(buffer)
+                        if family is None:
+                            raise InvalidChunk("missing family")
+                        if qualifier is None:
+                            raise InvalidChunk("missing qualifier")
+                        cells.append(
+                            Cell(value, current_key, family, qualifier, ts, list(labels))
+                        )
+                    yield Row(current_key, cells)
                     self._last_yielded_row_key = current_key
                     current_key = None
         if q:
             raise InvalidChunk("finished with incomplete row")
 
-    @staticmethod
-    async def merge_rows(
-        chunks: AsyncGenerator[ReadRowsResponsePB.CellChunk, None] | None
-    ):
-        """
-        Merge chunks into rows
-        """
-        if chunks is None:
-            return
-        try:
-            async for row_key, row_chunks in chunks:
-                cells : list[Cell] = []
-                # shared per cell storage
-                family: str | None = None
-                qualifier: bytes | None = None
-                while row_chunks:
-                    c = row_chunks.popleft()
-                    k = c.row_key
-                    f = c.family_name.value
-                    q = c.qualifier.value if c.HasField("qualifier") else None
+    # @staticmethod
+    # async def merge_rows(
+    #     chunks: AsyncGenerator[ReadRowsResponsePB.CellChunk, None] | None
+    # ):
+    #     """
+    #     Merge chunks into rows
+    #     """
+    #     if chunks is None:
+    #         return
+    #     try:
+    #         async for row_key, row_chunks in chunks:
+    #             cells : list[Cell] = []
+    #             # shared per cell storage
+    #             family: str | None = None
+    #             qualifier: bytes | None = None
+    #             while row_chunks:
+    #                 c = row_chunks.popleft()
+    #                 k = c.row_key
+    #                 f = c.family_name.value
+    #                 q = c.qualifier.value if c.HasField("qualifier") else None
 
-                    if k and k != row_key:
-                        raise InvalidChunk("unexpected new row key")
-                    if f:
-                        family = f
-                        if q is not None:
-                            qualifier = q
-                        else:
-                            raise InvalidChunk("new family without qualifier")
-                    elif q is not None:
-                        if family is None:
-                            raise InvalidChunk("new qualifier without family")
-                        qualifier = q
+    #                 if k and k != row_key:
+    #                     raise InvalidChunk("unexpected new row key")
+    #                 if f:
+    #                     family = f
+    #                     if q is not None:
+    #                         qualifier = q
+    #                     else:
+    #                         raise InvalidChunk("new family without qualifier")
+    #                 elif q is not None:
+    #                     if family is None:
+    #                         raise InvalidChunk("new qualifier without family")
+    #                     qualifier = q
 
-                    ts = c.timestamp_micros
-                    labels = c.labels if c.labels else []
-                    value = c.value
+    #                 ts = c.timestamp_micros
+    #                 labels = c.labels if c.labels else []
+    #                 value = c.value
 
-                    # merge split cells
-                    if c.value_size > 0:
-                        buffer = [value]
-                        while c.value_size > 0:
-                            # throws when premature end
-                            c = row_chunks.popleft()
+    #                 # merge split cells
+    #                 if c.value_size > 0:
+    #                     buffer = [value]
+    #                     while c.value_size > 0:
+    #                         # throws when premature end
+    #                         c = row_chunks.popleft()
 
-                            t = c.timestamp_micros
-                            cl = c.labels
-                            k = c.row_key
-                            if (
-                                c.HasField("family_name")
-                                and c.family_name.value != family
-                            ):
-                                raise InvalidChunk("family changed mid cell")
-                            if (
-                                c.HasField("qualifier")
-                                and c.qualifier.value != qualifier
-                            ):
-                                raise InvalidChunk("qualifier changed mid cell")
-                            if t and t != ts:
-                                raise InvalidChunk("timestamp changed mid cell")
-                            if cl and cl != labels:
-                                raise InvalidChunk("labels changed mid cell")
-                            if k and k != row_key:
-                                raise InvalidChunk("row key changed mid cell")
+    #                         t = c.timestamp_micros
+    #                         cl = c.labels
+    #                         k = c.row_key
+    #                         if (
+    #                             c.HasField("family_name")
+    #                             and c.family_name.value != family
+    #                         ):
+    #                             raise InvalidChunk("family changed mid cell")
+    #                         if (
+    #                             c.HasField("qualifier")
+    #                             and c.qualifier.value != qualifier
+    #                         ):
+    #                             raise InvalidChunk("qualifier changed mid cell")
+    #                         if t and t != ts:
+    #                             raise InvalidChunk("timestamp changed mid cell")
+    #                         if cl and cl != labels:
+    #                             raise InvalidChunk("labels changed mid cell")
+    #                         if k and k != row_key:
+    #                             raise InvalidChunk("row key changed mid cell")
 
-                                buffer.append(c.value)
-                            value = b"".join(buffer)
-                    if family is None:
-                        raise InvalidChunk("missing family")
-                    if qualifier is None:
-                        raise InvalidChunk("missing qualifier")
-                    cells.append(
-                        Cell(value, row_key, family, qualifier, ts, list(labels))
-                    )
-                yield Row(row_key, cells)
-        except IndexError:
-            raise InvalidChunk("invalid chunk sequence")
+    #                             buffer.append(c.value)
+    #                         value = b"".join(buffer)
+    #                 if family is None:
+    #                     raise InvalidChunk("missing family")
+    #                 if qualifier is None:
+    #                     raise InvalidChunk("missing qualifier")
+    #                 cells.append(
+    #                     Cell(value, row_key, family, qualifier, ts, list(labels))
+    #                 )
+    #             yield Row(row_key, cells)
+    #     except IndexError:
+    #         raise InvalidChunk("invalid chunk sequence")
 
     @staticmethod
     def _revise_request_rowset(
