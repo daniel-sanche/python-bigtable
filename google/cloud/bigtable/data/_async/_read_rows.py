@@ -193,8 +193,10 @@ class _ReadRowsOperationAsync:
 
                 if c.commit_row:
                     # update row state after each commit
-                    while q:
-                        yield q.popleft()
+                    if not current_key:
+                        raise InvalidChunk("commit row with no prior chunks")
+                    yield current_key, q
+                    q.clear()
                     self._last_yielded_row_key = current_key
                     current_key = None
         if q:
@@ -209,31 +211,20 @@ class _ReadRowsOperationAsync:
         """
         if chunks is None:
             return
-        it = chunks.__aiter__()
-        # For each row
-        while True:
-            try:
-                c = await it.__anext__()
-            except StopAsyncIteration:
-                # stream complete
-                return
-            row_key = c.row_key
-
-            if not row_key:
-                raise InvalidChunk("first row chunk is missing key")
-
-            cells = []
-
-            # shared per cell storage
-            family: str | None = None
-            qualifier: bytes | None = None
-
-            try:
-                # for each cell
-                while True:
+        try:
+            async for row_key, row_chunks in chunks:
+                cells : list[Cell] = []
+                # shared per cell storage
+                family: str | None = None
+                qualifier: bytes | None = None
+                n_chunks = len(row_chunks)
+                i = 0
+                while i < n_chunks:
+                    c = row_chunks[i]
                     k = c.row_key
                     f = c.family_name.value
                     q = c.qualifier.value if c.HasField("qualifier") else None
+
                     if k and k != row_key:
                         raise InvalidChunk("unexpected new row key")
                     if f:
@@ -256,7 +247,8 @@ class _ReadRowsOperationAsync:
                         buffer = [value]
                         while c.value_size > 0:
                             # throws when premature end
-                            c = await it.__anext__()
+                            i += 1
+                            c = row_chunks[i]
 
                             t = c.timestamp_micros
                             cl = c.labels
@@ -278,8 +270,8 @@ class _ReadRowsOperationAsync:
                             if k and k != row_key:
                                 raise InvalidChunk("row key changed mid cell")
 
-                            buffer.append(c.value)
-                        value = b"".join(buffer)
+                                buffer.append(c.value)
+                            value = b"".join(buffer)
                     if family is None:
                         raise InvalidChunk("missing family")
                     if qualifier is None:
@@ -287,12 +279,10 @@ class _ReadRowsOperationAsync:
                     cells.append(
                         Cell(value, row_key, family, qualifier, ts, list(labels))
                     )
-                    if c.commit_row:
-                        yield Row(row_key, cells)
-                        break
-                    c = await it.__anext__()
-            except StopAsyncIteration:
-                raise InvalidChunk("premature end of stream")
+                    i += 1
+                yield Row(row_key, cells)
+        except IndexError:
+            raise InvalidChunk("invalid chunk sequence")
 
     @staticmethod
     def _revise_request_rowset(
