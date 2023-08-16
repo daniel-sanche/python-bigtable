@@ -50,7 +50,7 @@ def conformance_tests(session):
         session.run("git", "clone", TEST_REPO_URL, CLONE_REPO_DIR)
     # time.sleep(10)
     with session.chdir(f"{clone_dir}/tests"):
-        session.run("go", "test", "-v", f"-proxy_addr=:{PROXY_SERVER_PORT}")
+        session.run("go", "test", "-v", f"-proxy_addr=:{PROXY_SERVER_PORT}", external=True)
 
 
 def default(session):
