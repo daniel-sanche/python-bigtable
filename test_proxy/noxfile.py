@@ -15,16 +15,14 @@
 from __future__ import absolute_import
 import os
 import pathlib
-import re
-from colorlog.escape_codes import parse_colors
 
 import nox
 
 
 DEFAULT_PYTHON_VERSION = "3.10"
 
-PROXY_SERVER_PORT=os.environ.get("PROXY_SERVER_PORT", "50055")
-PROXY_CLIENT_VERSION=os.environ.get("PROXY_CLIENT_VERSION", None)
+PROXY_SERVER_PORT = os.environ.get("PROXY_SERVER_PORT", "50055")
+PROXY_CLIENT_VERSION = os.environ.get("PROXY_CLIENT_VERSION", None)
 
 CURRENT_DIRECTORY = pathlib.Path(__file__).parent.absolute()
 REPO_ROOT_DIRECTORY = CURRENT_DIRECTORY.parent
@@ -42,33 +40,26 @@ nox.options.error_on_missing_interpreters = True
 def run_proxy(session):
     default(session)
 
+
 @nox.session(python=DEFAULT_PYTHON_VERSION)
 def conformance_tests(session):
-    import subprocess
-    import time
     # download the conformance test suite
     clone_dir = os.path.join(CURRENT_DIRECTORY, CLONE_REPO_DIR)
     if not os.path.exists(clone_dir):
         print("downloading copy of test repo")
         session.run("git", "clone", TEST_REPO_URL, CLONE_REPO_DIR)
-    # subprocess.Popen(["nox", "-s", "run_proxy"])
     # time.sleep(10)
     with session.chdir(f"{clone_dir}/tests"):
         session.run("go", "test", "-v", f"-proxy_addr=:{PROXY_SERVER_PORT}")
 
+
 def default(session):
     """Run the performance test suite."""
-    # Install all dependencies, then install this package into the
-    # virtualenv's dist-packages.
-    # session.install(
-    #     "grpcio",
-    # )
     if PROXY_CLIENT_VERSION is not None:
         # install released version of the library
         session.install(f"python-bigtable=={PROXY_CLIENT_VERSION}")
     else:
         # install the library from the source
         session.install("-e", str(REPO_ROOT_DIRECTORY))
-        session.install("-e", str(REPO_ROOT_DIRECTORY / "python-api-core"))
 
     session.run("python", "test_proxy.py", "--port", PROXY_SERVER_PORT, *session.posargs,)
