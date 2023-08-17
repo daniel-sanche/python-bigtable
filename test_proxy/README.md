@@ -1,11 +1,16 @@
 # CBT Python Test Proxy
 
-The CBT test proxy is intended for running confromance tests for Cloug Bigtable Python Client.
+The CBT test proxy is intended for running conformance tests for Cloud Bigtable Python Client.
 
-## Start test proxy
+## Option 1: Run Tests with Nox
 
+You can run the conformance tests in a single line by calling `nox -s conformance_tests` from the repo root
 
-You can also run the `test_proxy.py` file directly
+## Option 2: Run processes manually
+
+### Start test proxy
+
+You can use `test_proxy.py` to launch a new test proxy process directly
 
 ```
 cd python-bigtable/test_proxy
@@ -19,7 +24,13 @@ cd python-bigtable/test_proxy
 python test_proxy.py --port 8080
 ```
 
-## Run the test cases
+You can run the test proxy against the previous `v2` client by running it with the `--legacy-client` flag:
+
+```
+python test_proxy.py --legacy-client
+```
+
+### Run the test cases
 
 Prerequisites:
 - If you have not already done so, [install golang](https://go.dev/doc/install).
@@ -41,10 +52,3 @@ Launch the tests
 go test -v -proxy_addr=:50055
 ```
 
-## Test the legacy client
-
-You can run the test proxy against the previous `v2` client by running it with the `--legacy-client` flag:
-
-```
-python test_proxy.py --legacy-client
-```
