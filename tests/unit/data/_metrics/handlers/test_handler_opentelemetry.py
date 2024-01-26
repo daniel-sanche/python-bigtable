@@ -56,7 +56,7 @@ class TestOpenTelemetryMetricsHandler:
 
         instance = self._make_one()
         metric = getattr(instance.otel, metric_name)
-        if kind == "counter":
+        if kind == "count":
             assert isinstance(metric, Counter)
         elif kind == "histogram":
             assert isinstance(metric, Histogram)

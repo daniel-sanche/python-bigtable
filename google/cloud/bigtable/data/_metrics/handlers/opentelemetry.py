@@ -103,7 +103,7 @@ class OpenTelemetryMetricsHandler(MetricsHandler):
         table_id: str,
         app_profile_id: str | None = None,
         client_uid: str | None = None,
-        instruments: _OpenTelemetryInstruments | None = _OpenTelemetryInstruments(),
+        instruments: _OpenTelemetryInstruments = _OpenTelemetryInstruments(),
         **kwargs,
     ):
         super().__init__()
