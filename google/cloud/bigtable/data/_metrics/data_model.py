@@ -13,7 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
-from typing import Callable, Any, Generator, cast, TYPE_CHECKING
+from typing import Callable, Any, Generator, Tuple, cast, TYPE_CHECKING
 
 import datetime
 import time
@@ -22,6 +22,7 @@ import re
 import logging
 
 from enum import Enum
+from functools import lru_cache
 from dataclasses import dataclass
 from dataclasses import field
 from grpc import StatusCode
@@ -217,19 +218,14 @@ class ActiveOperationMetric:
             )
         if self.cluster_id is None or self.zone is None:
             # BIGTABLE_METADATA_KEY should give a binary string with cluster_id and zone
-            bigtable_metadata = cast(bytes, metadata.get(BIGTABLE_METADATA_KEY))
-            if bigtable_metadata:
-                try:
-                    decoded = "".join(
-                        c if c.isprintable() else " "
-                        for c in bigtable_metadata.decode("utf-8")
-                    )
-                    split_data = decoded.split()
-                    self.zone = split_data[0]
-                    self.cluster_id = split_data[1]
-                except (AttributeError, IndexError):
+            blob = cast(bytes, metadata.get(BIGTABLE_METADATA_KEY))
+            if blob:
+                parse_result = self._parse_response_metadata_blob(blob)
+                if parse_result is not None:
+                    self.zone, self.cluster_id = parse_result
+                else:
                     self._handle_error(
-                        f"Failed to decode {BIGTABLE_METADATA_KEY} metadata: {bigtable_metadata!r}"
+                        f"Failed to decode {BIGTABLE_METADATA_KEY} metadata: {blob!r}"
                     )
         # SERVER_TIMING_METADATA_KEY should give a string with the server-latency headers
         timing_header = cast(str, metadata.get(SERVER_TIMING_METADATA_KEY))
@@ -238,6 +234,32 @@ class ActiveOperationMetric:
             if timing_data and self.active_attempt:
                 # convert from milliseconds to seconds
                 self.active_attempt.gfe_latency = float(timing_data.group(1)) / 1000
+
+    @staticmethod
+    @lru_cache(maxsize=32)
+    def _parse_response_metadata_blob(blob: bytes) -> Tuple[str, str] | None:
+        """
+        Parse the response metadata blob and return a dictionary of key-value pairs.
+
+        Function is cached to avoid parsing the same blob multiple times.
+
+        Args:
+          - blob: the metadata blob as extracted from the grpc call
+        Returns:
+          - a tuple of zone and cluster_id, or None if parsing failed
+        """
+        try:
+            decoded = "".join(
+                c if c.isprintable() else " "
+                for c in blob.decode("utf-8")
+            )
+            split_data = decoded.split()
+            zone = split_data[0]
+            cluster_id = split_data[1]
+            return zone, cluster_id
+        except (AttributeError, IndexError):
+            # failed to parse metadata
+            return None
 
     def attempt_first_response(self) -> None:
         """
