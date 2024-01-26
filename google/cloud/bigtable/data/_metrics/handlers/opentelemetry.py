@@ -18,26 +18,27 @@ from uuid import uuid4
 from google.cloud.bigtable import __version__ as bigtable_version
 from google.cloud.bigtable.data._metrics.handlers._base import MetricsHandler
 from google.cloud.bigtable.data._metrics.data_model import OperationType
+from google.cloud.bigtable.data._metrics.data_model import DEFAULT_CLUSTER_ID
+from google.cloud.bigtable.data._metrics.data_model import DEFAULT_ZONE
 from google.cloud.bigtable.data._metrics.data_model import ActiveOperationMetric
 from google.cloud.bigtable.data._metrics.data_model import CompletedAttemptMetric
 from google.cloud.bigtable.data._metrics.data_model import CompletedOperationMetric
 
 
-class _OpenTelemetryInstrumentSingleton:
+class _OpenTelemetryInstruments:
     """
-    Singleton class that holds OpenTelelmetry instrument objects,
-    so that multiple Tables can write to the same metrics.
+    class that holds OpenTelelmetry instrument objects
     """
 
-    def __new__(cls):
-        if not hasattr(cls, "instance"):
-            cls.instance = super(_OpenTelemetryInstrumentSingleton, cls).__new__(cls)
-        return cls.instance
+    def __init__(self, meter_provider=None):
+        if meter_provider is None:
+            # use global meter provider
+            from opentelemetry import metrics
 
-    def __init__(self):
-        from opentelemetry import metrics
-
-        meter = metrics.get_meter(__name__)
+            meter_provider = metrics
+        # grab meter for this module
+        meter = meter_provider.get_meter("bigtable.googleapis.com")
+        # create instruments
         self.operation_latencies = meter.create_histogram(
             name="operation_latencies",
             description="A distribution of the latency of each client method call, across all of it's RPC attempts",
@@ -66,8 +67,8 @@ class _OpenTelemetryInstrumentSingleton:
             name="connectivity_error_count",
             description="A count of the number of attempts that failed to reach Google's network.",
         )
-        self.application_blocking_latencies = meter.create_histogram(
-            name="application_blocking_latencies",
+        self.application_latencies = meter.create_histogram(
+            name="application_latencies",
             description="A distribution of the total latency introduced by your application when Cloud Bigtable has available response data but your application has not consumed it.",
             unit="ms",
         )
@@ -90,7 +91,7 @@ class OpenTelemetryMetricsHandler(MetricsHandler):
       - retry_count: Number of additional RPCs sent after the initial attempt.
       - server_latencies: latency recorded on the server side for each attempt.
       - connectivity_error_count: number of attempts that failed to reach Google's network.
-      - application_blocking_latencies: the time spent waiting for the application to process the next response.
+      - application_latencies: the time spent waiting for the application to process the next response.
       - throttling_latencies: latency introduced by waiting when there are too many outstanding requests in a bulk operation.
     """
 
@@ -100,18 +101,20 @@ class OpenTelemetryMetricsHandler(MetricsHandler):
         project_id: str,
         instance_id: str,
         table_id: str,
-        app_profile_id: str | None,
+        app_profile_id: str | None = None,
         client_uid: str | None = None,
+        instruments: _OpenTelemetryInstruments | None = _OpenTelemetryInstruments(),
         **kwargs,
     ):
         super().__init__()
-        # otel singleton holds shared instruments
-        self.otel = _OpenTelemetryInstrumentSingleton()
-
+        self.otel = instruments
         # fixed labels sent with each metric update
         self.shared_labels = {
             "client_name": f"python-bigtable/{bigtable_version}",
             "client_uid": client_uid or str(uuid4()),
+            "resource_project": project_id,
+            "resource_instance": instance_id,
+            "resource_table": table_id,
         }
         if app_profile_id:
             self.shared_labels["app_profile"] = app_profile_id
@@ -122,14 +125,22 @@ class OpenTelemetryMetricsHandler(MetricsHandler):
           - operation_latencies
           - retry_count
         """
+        try:
+            status = str(op.final_status.value[0])
+        except (IndexError, TypeError):
+            status = "2"  # unknown
         labels = {
             "method": op.op_type.value,
-            "status": op.final_status.value,
-            "streaming": op.is_streaming,
+            "status": status,
+            "resource_zone": op.zone,
+            "resource_cluster": op.cluster_id,
             **self.shared_labels,
         }
+        is_streaming = str(op.is_streaming)
 
-        self.otel.operation_latencies.record(op.duration, labels)
+        self.otel.operation_latencies.record(
+            op.duration, {"streaming": is_streaming, **labels}
+        )
         self.otel.retry_count.add(len(op.completed_attempts) - 1, labels)
 
     def on_attempt_complete(
@@ -141,23 +152,30 @@ class OpenTelemetryMetricsHandler(MetricsHandler):
           - first_response_latencies
           - server_latencies
           - connectivity_error_count
-          - application_blocking_latencies
+          - application_latencies
           - throttling_latencies
         """
         labels = {
             "method": op.op_type.value,
-            "status": attempt.end_status.value,
-            "streaming": op.is_streaming,
+            "resource_zone": op.zone or DEFAULT_ZONE,  # fallback to default if unset
+            "resource_cluster": op.cluster_id or DEFAULT_CLUSTER_ID,
             **self.shared_labels,
         }
+        try:
+            status = str(attempt.end_status.value[0])
+        except (IndexError, TypeError):
+            status = "2"  # unknown
+        is_streaming = str(op.is_streaming)
 
-        self.otel.attempt_latencies.record(attempt.duration, labels)
+        self.otel.attempt_latencies.record(
+            attempt.duration, {"streaming": is_streaming, "status": status, **labels}
+        )
         combined_throttling = attempt.grpc_throttling_time
         if not op.completed_attempts:
             # add flow control latency to first attempt's throttling latency
             combined_throttling += op.flow_throttling_time
         self.otel.throttling_latencies.record(combined_throttling, labels)
-        self.otel.application_blocking_latencies.record(
+        self.otel.application_latencies.record(
             attempt.application_blocking_time + attempt.backoff_before_attempt, labels
         )
         if (
@@ -165,11 +183,14 @@ class OpenTelemetryMetricsHandler(MetricsHandler):
             and attempt.first_response_latency is not None
         ):
             self.otel.first_response_latencies.record(
-                attempt.first_response_latency, labels
+                attempt.first_response_latency, {"status": status, **labels}
             )
         if attempt.gfe_latency is not None:
-            self.otel.server_latencies.record(attempt.gfe_latency, labels)
+            self.otel.server_latencies.record(
+                attempt.gfe_latency,
+                {"streaming": is_streaming, "status": status, **labels},
+            )
         else:
             # gfe headers not attached. Record a connectivity error.
             # TODO: this should not be recorded as an error when direct path is enabled
-            self.otel.connectivity_error_count.add(1, labels)
+            self.otel.connectivity_error_count.add(1, {"status": status, **labels})

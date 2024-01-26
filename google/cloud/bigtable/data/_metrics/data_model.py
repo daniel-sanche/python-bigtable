@@ -61,12 +61,12 @@ class TimeTuple:
 class OperationType(Enum):
     """Enum for the type of operation being performed."""
 
-    READ_ROWS = "Bigtable.ReadRows"
-    SAMPLE_ROW_KEYS = "Bigtable.SampleRowKeys"
-    BULK_MUTATE_ROWS = "Bigtable.MutateRows"
-    MUTATE_ROW = "Bigtable.MutateRow"
-    CHECK_AND_MUTATE = "Bigtable.CheckAndMutateRow"
-    READ_MODIFY_WRITE = "Bigtable.ReadModifyWriteRow"
+    READ_ROWS = "ReadRows"
+    SAMPLE_ROW_KEYS = "SampleRowKeys"
+    BULK_MUTATE_ROWS = "MutateRows"
+    MUTATE_ROW = "MutateRow"
+    CHECK_AND_MUTATE = "CheckAndMutateRow"
+    READ_MODIFY_WRITE = "ReadModifyWriteRow"
 
 
 class OperationState(Enum):
@@ -215,7 +215,6 @@ class ActiveOperationMetric:
             return self._handle_error(
                 INVALID_STATE_ERROR.format("add_response_metadata", self.state)
             )
-
         if self.cluster_id is None or self.zone is None:
             # BIGTABLE_METADATA_KEY should give a binary string with cluster_id and zone
             bigtable_metadata = cast(bytes, metadata.get(BIGTABLE_METADATA_KEY))
@@ -226,8 +225,8 @@ class ActiveOperationMetric:
                         for c in bigtable_metadata.decode("utf-8")
                     )
                     split_data = decoded.split()
-                    self.cluster_id = split_data[0]
-                    self.zone = split_data[1]
+                    self.zone = split_data[0]
+                    self.cluster_id = split_data[1]
                 except (AttributeError, IndexError):
                     self._handle_error(
                         f"Failed to decode {BIGTABLE_METADATA_KEY} metadata: {bigtable_metadata!r}"
