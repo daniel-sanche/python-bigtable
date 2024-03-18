@@ -37,6 +37,7 @@ from google.api_core.client_options import ClientOptions
 from google.api_core import exceptions as core_exceptions
 from google.api_core import gapic_v1
 from google.api_core.grpc_helpers_async import GrpcAsyncStream
+from google.api_core.grpc_helpers_async import AwaitableGrpcCall
 from google.api_core import retry_async as retries
 from google.auth import credentials as ga_credentials  # type: ignore
 from google.oauth2 import service_account  # type: ignore
@@ -456,7 +457,7 @@ class BigtableAsyncClient:
         retry: OptionalRetry = gapic_v1.method.DEFAULT,
         timeout: Union[float, object] = gapic_v1.method.DEFAULT,
         metadata: Sequence[Tuple[str, str]] = (),
-    ) -> bigtable.MutateRowResponse:
+    ) -> AwaitableGrpcCall[bigtable.MutateRowResponse]:
         r"""Mutates a row atomically. Cells already present in the row are
         left unchanged unless explicitly changed by ``mutation``.
 
@@ -685,7 +686,7 @@ class BigtableAsyncClient:
         retry: OptionalRetry = gapic_v1.method.DEFAULT,
         timeout: Union[float, object] = gapic_v1.method.DEFAULT,
         metadata: Sequence[Tuple[str, str]] = (),
-    ) -> bigtable.CheckAndMutateRowResponse:
+    ) -> AwaitableGrpcCall[bigtable.CheckAndMutateRowResponse]:
         r"""Mutates a row atomically based on the output of a
         predicate Reader filter.
 
@@ -834,7 +835,7 @@ class BigtableAsyncClient:
         retry: OptionalRetry = gapic_v1.method.DEFAULT,
         timeout: Union[float, object] = gapic_v1.method.DEFAULT,
         metadata: Sequence[Tuple[str, str]] = (),
-    ) -> bigtable.PingAndWarmResponse:
+    ) -> AwaitableGrpcCall[bigtable.PingAndWarmResponse]:
         r"""Warm up associated instance metadata for this
         connection. This call is not required but may be useful
         for connection keep-alive.
@@ -927,7 +928,7 @@ class BigtableAsyncClient:
         retry: OptionalRetry = gapic_v1.method.DEFAULT,
         timeout: Union[float, object] = gapic_v1.method.DEFAULT,
         metadata: Sequence[Tuple[str, str]] = (),
-    ) -> bigtable.ReadModifyWriteRowResponse:
+    ) -> AwaitableGrpcCall[bigtable.ReadModifyWriteRowResponse]:
         r"""Modifies a row atomically on the server. The method
         reads the latest existing timestamp and value from the
         specified columns and writes a new entry based on
