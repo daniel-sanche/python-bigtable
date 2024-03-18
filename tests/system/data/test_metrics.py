@@ -77,7 +77,10 @@ async def _populate_calls(client, instance_id, table_id):
             "app_profile_id": app_profile_id,  # use artificial app profile for metrics, not in backend
         }
         # create a GCP exporter with 1 second interval
-        with mock.patch("google.cloud.bigtable.data._metrics.handlers.gcp_exporter.EXPORT_INTERVAL_MS", 1000):
+        with mock.patch(
+            "google.cloud.bigtable.data._metrics.handlers.gcp_exporter.EXPORT_INTERVAL_MS",
+            1000,
+        ):
             table._metrics.handlers = [
                 GoogleCloudMetricsHandler(**kwargs),
             ]

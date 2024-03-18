@@ -335,7 +335,7 @@ class MutationsBatcherAsync:
         flow_start_time = time.monotonic()
         async for batch in self._flow_control.add_to_flow(new_entries):
             # add time waiting on flow control to throttling metric
-            metric.flow_throttling_time = time.monotonic() - flow_start_time
+            metric.flow_throttling_time_ms = (time.monotonic() - flow_start_time) * 1000
             batch_task = self._create_bg_task(self._execute_mutate_rows, batch, metric)
             in_process_requests.append(batch_task)
             # start a new metric for next batch

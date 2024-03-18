@@ -17,7 +17,6 @@ from typing import Callable, Any, Generator, Tuple, cast, TYPE_CHECKING
 
 import datetime
 import time
-import os
 import re
 import logging
 
@@ -371,7 +370,13 @@ class ActiveOperationMetric:
     def build_wrapped_fn_handlers(
         self,
         inner_predicate: Callable[[Exception], bool],
-    ) -> Callable[[Exception], bool]:
+    ) -> Tuple[
+        Callable[[Exception], bool],
+        Callable[
+            [list[Exception], RetryFailureReason, float | None],
+            tuple[Exception, Exception | None],
+        ],
+    ]:
         """
         One way to track metrics is by wrapping the `predicate` and `exception_factory`
         arguments of `api_core.Retry`. This will notify us when an exception occurs so
@@ -421,7 +426,9 @@ class ActiveOperationMetric:
         if isinstance(exc, _BigtableExceptionGroup) and exc.exceptions:
             # find most recent in group
             return ActiveOperationMetric._exc_to_status(exc.exceptions[-1])
-        if isinstance(exc, (FailedMutationEntryError, FailedQueryShardError)):
+        if isinstance(
+            exc, (FailedMutationEntryError, FailedQueryShardError)
+        ) and isinstance(exc.__cause__, Exception):
             # find cause of failed entries
             return ActiveOperationMetric._exc_to_status(exc.__cause__)
         # parse grpc exceptions

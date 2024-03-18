@@ -144,11 +144,11 @@ class _MutateRowsOperationAsync:
             all_errors: list[Exception] = []
             for idx, exc_list in self.errors.items():
                 if len(exc_list) == 0:
-                    exc = core_exceptions.ClientError(
+                    not_found = core_exceptions.ClientError(
                         f"Mutation {idx} failed with no associated errors"
                     )
-                    self._operation_metrics.end_with_status(exc)
-                    raise exc
+                    self._operation_metrics.end_with_status(not_found)
+                    raise not_found
                 elif len(exc_list) == 1:
                     cause_exc = exc_list[0]
                 else:

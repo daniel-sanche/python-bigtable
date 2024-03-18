@@ -37,7 +37,6 @@ from google.cloud.bigtable.data._helpers import _make_metadata
 from google.cloud.bigtable.data._helpers import backoff_generator
 
 from google.api_core.grpc_helpers_async import GrpcAsyncStream
-from google.cloud.bigtable.data._helpers import _retry_exception_factory
 
 from google.api_core import retry as retries
 

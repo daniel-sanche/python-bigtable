@@ -657,7 +657,9 @@ class TestActiveOperationMetric:
         _, factory = cls.build_wrapped_fn_handlers(mock_instance, None)
         factory([], RetryFailureReason.TIMEOUT, None)
         assert mock_instance.end_with_status.call_count == 1
-        assert type(mock_instance.end_with_status.call_args[0][0]) == DeadlineExceeded
+        assert isinstance(
+            mock_instance.end_with_status.call_args[0][0], DeadlineExceeded
+        )
 
         # if called with reason==NON_RETRYABLE_ERROR, do not
         mock_instance = mock.Mock()
