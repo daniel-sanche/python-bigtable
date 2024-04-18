@@ -561,9 +561,7 @@ class TableAsync:
             default_mutate_rows_retryable_errors or ()
         )
         self.default_retryable_errors = default_retryable_errors or ()
-        self._register_instance_future: asyncio.Future[
-            None
-        ] = self._register_with_client()
+        self._register_instance_future = None
 
     def _register_with_client(self) -> asyncio.Future[None]:
         """

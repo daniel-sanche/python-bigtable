@@ -195,6 +195,7 @@ class MutationsBatcherAsync:
         batch_attempt_timeout: float | None | TABLE_DEFAULT = TABLE_DEFAULT.MUTATE_ROWS,
         batch_retryable_errors: Sequence[type[Exception]]
         | TABLE_DEFAULT = TABLE_DEFAULT.MUTATE_ROWS,
+        event_loop = None
     ):
         """
         Args:
@@ -214,6 +215,7 @@ class MutationsBatcherAsync:
           - batch_retryable_errors: a list of errors that will be retried if encountered.
               Defaults to the Table's default_mutate_rows_retryable_errors.
         """
+        self._event_loop = event_loop if event_loop else asyncio.get_event_loop()
         self._operation_timeout, self._attempt_timeout = _get_timeouts(
             batch_operation_timeout, batch_attempt_timeout, table
         )
@@ -443,8 +445,7 @@ class MutationsBatcherAsync:
                 f"{len(self._staged_entries)} Unflushed mutations will not be sent to the server."
             )
 
-    @staticmethod
-    def _create_bg_task(func, *args, **kwargs) -> asyncio.Future[Any]:
+    def _create_bg_task(self, func, *args, **kwargs) -> asyncio.Future[Any]:
         """
         Create a new background task, and return a future
 
@@ -458,7 +459,7 @@ class MutationsBatcherAsync:
         Returns:
           - Future object representing the background task
         """
-        return asyncio.create_task(func(*args, **kwargs))
+        return self._event_loop.create_task(func(*args, **kwargs))
 
     @staticmethod
     async def _wait_for_batch_results(

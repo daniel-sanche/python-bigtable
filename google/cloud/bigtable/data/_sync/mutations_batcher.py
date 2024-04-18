@@ -29,66 +29,22 @@ if TYPE_CHECKING:
     from google.cloud.bigtable.data.exceptions import FailedMutationEntryError
 
 
-class _FlowControl(_FlowControl_SyncGen):
-    pass
+class MutationsBatcher:
 
 
-class MutationsBatcher(MutationsBatcher_SyncGen):
-    @property
-    def _executor(self):
-        """
-        Return a ThreadPoolExecutor for background tasks
-        """
-        if not hasattr(self, "_threadpool"):
-            self._threadpool = concurrent.futures.ThreadPoolExecutor(max_workers=8)
-        return self._threadpool
+    def __init__(self, table, loop, **kwargs):
+        from google.cloud.bigtable.data import MutationsBatcherAsync
+        self.__event_loop = loop
+        self._batcher = MutationsBatcherAsync(table._async_table, event_loop=loop, **kwargs)
 
-    def close(self):
-        """
-        Flush queue and clean up resources
-        """
-        self._closed.set()
-        # attempt cancel timer if not started
-        self._flush_timer.cancel()
-        self._schedule_flush()
-        with self._executor:
-            self._executor.shutdown(wait=True)
-        atexit.unregister(self._on_exit)
-        # raise unreported exceptions
-        self._raise_exceptions()
+    def append(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(self._batcher.append(*args, **kwargs))
 
-    def _create_bg_task(self, func, *args, **kwargs):
-        return self._executor.submit(func, *args, **kwargs)
+    def __enter__(self):
+        return self
 
-    @staticmethod
-    def _wait_for_batch_results(
-        *tasks: concurrent.futures.Future[list[FailedMutationEntryError]]
-        | concurrent.futures.Future[None],
-    ) -> list[Exception]:
-        if not tasks:
-            return []
-        exceptions: list[Exception] = []
-        for task in tasks:
-            try:
-                exc_list = task.result()
-                if exc_list:
-                    for exc in exc_list:
-                        # strip index information
-                        exc.index = None
-                    exceptions.extend(exc_list)
-            except Exception as e:
-                exceptions.append(e)
-        return exceptions
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return self.__event_loop.run_until_complete(self._batcher.__aexit__(exc_type, exc_val, exc_tb))
 
-    def _timer_routine(self, interval: float | None) -> None:
-        """
-        Triggers new flush tasks every `interval` seconds
-        Ends when the batcher is closed
-        """
-        if not interval or interval <= 0:
-            return None
-        while not self._closed.is_set():
-            # wait until interval has passed, or until closed
-            self._closed.wait(timeout=interval)
-            if not self._closed.is_set() and self._staged_entries:
-                self._schedule_flush()
+    def __getattr__(self, name):
+        return getattr(self._batcher, name)

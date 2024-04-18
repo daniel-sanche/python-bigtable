@@ -31,6 +31,12 @@ if TYPE_CHECKING:
 
 
 class BigtableDataClient(BigtableDataClient_SyncGen):
+
+    def __init__(self, *args, **kwargs):
+        from google.cloud.bigtable.data import BigtableDataClientAsync
+        super().__init__(*args, **kwargs)
+        self._async_client = BigtableDataClientAsync(*args, **kwargs)
+
     @property
     def _executor(self) -> concurrent.futures.ThreadPoolExecutor:
         if not hasattr(self, "_executor_instance"):
@@ -76,36 +82,83 @@ class BigtableDataClient(BigtableDataClient_SyncGen):
         self.transport.close()
 
 
-class Table(Table_SyncGen):
-    def _register_with_client(self) -> concurrent.futures.Future[None]:
-        return self.client._executor.submit(
-            self.client._register_instance, self.instance_id, self
-        )
+class Table:
 
-    def _shard_batch_helper(
-        self, kwargs_list: list[dict]
-    ) -> list[list[Row] | BaseException]:
-        futures_list = [
-            self.client._executor.submit(self.read_rows, **kwargs)
-            for kwargs in kwargs_list
-        ]
-        results_list: list[list[Row] | BaseException] = []
-        for future in futures_list:
-            if future.exception():
-                results_list.append(future.exception())
-            else:
-                result = future.result()
-                if result is not None:
-                    results_list.append(result)
-        return results_list
+    def __init__(self, client, *args, **kwargs):
+        from google.cloud.bigtable.data import TableAsync
+        import asyncio
+        self.__event_loop = asyncio.get_event_loop()
+        self.client = client
+        self._async_table = TableAsync(client._async_client, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._async_table, name)
 
     def __enter__(self):
-        """
-        Implement  context manager protocol
-
-        Ensure registration task has time to run, so that
-        grpc channels will be warmed for the specified instance
-        """
-        if self._register_instance_future:
-            self._register_instance_future.result()
         return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return
+
+    def close(self):
+        return
+
+    def read_rows_stream(self, *args, **kwargs):
+        gen = self.__event_loop.run_until_complete(
+            self._async_table.read_rows_stream(*args, **kwargs)
+        )
+        while True:
+            try:
+                next_val = self.__event_loop.run_until_complete(gen.__anext__())
+                yield next_val
+            except StopAsyncIteration:
+                break
+
+    def read_rows(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(
+            self._async_table.read_rows(*args, **kwargs)
+        )
+
+    def read_row(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(
+            self._async_table.read_row(*args, **kwargs)
+        )
+
+    def read_rows_sharded(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(
+            self._async_table.read_rows_sharded(*args, **kwargs)
+        )
+
+    def row_exists(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(
+            self._async_table.row_exists(*args, **kwargs)
+        )
+
+    def mutate_rows(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(
+            self._async_table.mutate_rows(*args, **kwargs)
+        )
+
+    def mutate_row(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(
+            self._async_table.mutate_row(*args, **kwargs)
+        )
+
+    def sample_row_keys(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(
+            self._async_table.sample_row_keys(*args, **kwargs)
+        )
+
+    def read_modify_write_row(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(
+            self._async_table.read_modify_write_row(*args, **kwargs)
+        )
+
+    def check_and_mutate_row(self, *args, **kwargs):
+        return self.__event_loop.run_until_complete(
+            self._async_table.check_and_mutate_row(*args, **kwargs)
+        )
+
+    def mutations_batcher(self, *args, **kwargs):
+        from google.cloud.bigtable.data._sync.mutations_batcher import MutationsBatcher
+        return MutationsBatcher(self, self.__event_loop, *args, **kwargs)
