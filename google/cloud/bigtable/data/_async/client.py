@@ -189,6 +189,10 @@ class BigtableDataClientAsync(ClientWithProject):
                     stacklevel=2,
                 )
 
+    @classmethod
+    async def _make_one(cls, *args, **kwargs):
+        return cls(*args, **kwargs)
+
     @staticmethod
     def _client_version() -> str:
         """
@@ -562,6 +566,10 @@ class TableAsync:
         )
         self.default_retryable_errors = default_retryable_errors or ()
         self._register_instance_future = None
+
+    @classmethod
+    async def _make_one(cls, *args, **kwargs):
+        return cls(*args, **kwargs)
 
     def _register_with_client(self) -> asyncio.Future[None]:
         """

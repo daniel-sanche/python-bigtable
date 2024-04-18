@@ -32,19 +32,19 @@ if TYPE_CHECKING:
 class MutationsBatcher:
 
 
-    def __init__(self, table, loop, **kwargs):
+    def __init__(self, table, **kwargs):
         from google.cloud.bigtable.data import MutationsBatcherAsync
-        self.__event_loop = loop
-        self._batcher = MutationsBatcherAsync(table._async_table, event_loop=loop, **kwargs)
+        self._event_loop = table._event_loop
+        self._batcher = self._event_loop.run_until_complete(MutationsBatcherAsync._make_one(table._async_table, **kwargs))
 
     def append(self, *args, **kwargs):
-        return self.__event_loop.run_until_complete(self._batcher.append(*args, **kwargs))
+        return self._event_loop.run_until_complete(self._batcher.append(*args, **kwargs))
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        return self.__event_loop.run_until_complete(self._batcher.__aexit__(exc_type, exc_val, exc_tb))
+        return self._event_loop.run_until_complete(self._batcher.__aexit__(exc_type, exc_val, exc_tb))
 
     def __getattr__(self, name):
         return getattr(self._batcher, name)

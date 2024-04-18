@@ -195,7 +195,6 @@ class MutationsBatcherAsync:
         batch_attempt_timeout: float | None | TABLE_DEFAULT = TABLE_DEFAULT.MUTATE_ROWS,
         batch_retryable_errors: Sequence[type[Exception]]
         | TABLE_DEFAULT = TABLE_DEFAULT.MUTATE_ROWS,
-        event_loop = None
     ):
         """
         Args:
@@ -215,7 +214,6 @@ class MutationsBatcherAsync:
           - batch_retryable_errors: a list of errors that will be retried if encountered.
               Defaults to the Table's default_mutate_rows_retryable_errors.
         """
-        self._event_loop = event_loop if event_loop else asyncio.get_event_loop()
         self._operation_timeout, self._attempt_timeout = _get_timeouts(
             batch_operation_timeout, batch_attempt_timeout, table
         )
@@ -249,6 +247,10 @@ class MutationsBatcherAsync:
         )
         # clean up on program exit
         atexit.register(self._on_exit)
+
+    @classmethod
+    async def _make_one(cls, *args, **kwargs):
+        return cls(*args, **kwargs)
 
     async def _timer_routine(self, interval: float | None) -> None:
         """
@@ -459,7 +461,7 @@ class MutationsBatcherAsync:
         Returns:
           - Future object representing the background task
         """
-        return self._event_loop.create_task(func(*args, **kwargs))
+        return asyncio.create_task(func(*args, **kwargs))
 
     @staticmethod
     async def _wait_for_batch_results(
