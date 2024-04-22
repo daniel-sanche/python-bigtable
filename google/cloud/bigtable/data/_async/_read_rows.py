@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import (
     TYPE_CHECKING,
+    Generator,
     AsyncGenerator,
     AsyncIterable,
     Awaitable,
@@ -156,8 +157,30 @@ class _ReadRowsOperationAsync:
         """
         if stream is None:
             return
+        generator = self.merge_rows_generator()
+        # prime the generator
+        next(generator)
+        try:
+            # pass responses to the generator
+            async for resp in await stream:
+                next_row = generator.send(resp)
+                if next_row is not None:
+                    yield next_row
+            # read any rows left in the generator
+            while True:
+                next_row = generator.send(None)
+                if next_row is not None:
+                    yield next_row
+        except StopIteration:
+            pass
+
+    def merge_rows_generator(self) -> Generator[ReadRowsResponsePB.CellChunk, ReadRowsResponsePB, None]:
+        """
+        process chunks out of raw read_rows stream
+        """
         q = deque()
-        async for resp in await stream:
+        resp = yield
+        while resp is not None:
             # extract proto from proto-plus wrapper
             resp = resp._pb
 
@@ -262,9 +285,12 @@ class _ReadRowsOperationAsync:
                         cells.append(
                             Cell(value, current_key, family, qualifier, ts, list(labels))
                         )
-                    yield Row(current_key, cells)
+                    resp = yield Row(current_key, cells)
                     self._last_yielded_row_key = current_key
                     current_key = None
+                else:
+                    # not ready to send a row yet
+                    resp = yield None
         if q:
             raise InvalidChunk("finished with incomplete row")
 
