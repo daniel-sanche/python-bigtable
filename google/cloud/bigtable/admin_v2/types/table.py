@@ -19,7 +19,8 @@ from typing import MutableMapping, MutableSequence
 
 import proto  # type: ignore
 
-from google.cloud.bigtable.admin_v2.types import types, oneof_message
+from google.cloud.bigtable.admin_v2.overlay.types.oneof_message import OneofMessage
+from google.cloud.bigtable.admin_v2.types import types
 from google.protobuf import duration_pb2  # type: ignore
 from google.protobuf import timestamp_pb2  # type: ignore
 from google.rpc import status_pb2  # type: ignore
@@ -569,7 +570,7 @@ class ColumnFamily(proto.Message):
     )
 
 
-class GcRule(oneof_message.OneofMessage):
+class GcRule(OneofMessage):
     r"""Rule for determining which cells to delete during garbage
     collection.
 
