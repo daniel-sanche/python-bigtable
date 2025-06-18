@@ -50,6 +50,7 @@ class RestoreTableOperation(operation_async.AsyncOperation):
     def __init__(self, operations_client, restore_table_operation: operation_async.AsyncOperation):
         self._operations_client = operations_client
         self._optimize_restored_table_operation = None
+        self._result_set = False
         super().__init__(
             restore_table_operation._operation,
             restore_table_operation._refresh,
@@ -59,9 +60,7 @@ class RestoreTableOperation(operation_async.AsyncOperation):
             polling=restore_table_operation._polling,
         )
 
-    async def optimize_restored_table_operation(
-        self,
-    ) -> None:
+    async def optimize_restored_table_operation(self, timeout) -> None:
         """Gets the OptimizeRestoredTable long-running operation that runs after this operation finishes.
 
         This is a blocking call that will return the operation after this current long-running operation
@@ -91,12 +90,12 @@ class RestoreTableOperation(operation_async.AsyncOperation):
                 An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
                 after this one.
         """
-
-        await self
-        if not self._optimize_restored_table_operation:
+        if not self._result_set:
+            raise RuntimeError("Restore Table operation incomplete")
+        elif not self._optimize_restored_table_operation:
             return None
-
-        return await self._optimize_restored_table_operation
+        else:
+            return await self._optimize_restored_table_operation.result(timeout)
 
     def set_result(self, response):
         optimize_restored_table_operation_name = (
@@ -115,5 +114,5 @@ class RestoreTableOperation(operation_async.AsyncOperation):
                 empty_pb2.Empty,
                 metadata_type=OptimizeRestoredTableMetadata,
             )
-
         super().set_result(response)
+        self._result_set = True

@@ -59,7 +59,7 @@ class RestoreTableOperation(operation.Operation):
             polling=restore_table_operation._polling,
         )
 
-    def optimize_restored_table_operation(self) -> None:
+    def optimize_restored_table_operation(self, timeout, retry, polling) -> None:
         """Gets the OptimizeRestoredTable long-running operation that runs after this operation finishes.
 
         This is a blocking call that will return the operation after this current long-running operation
@@ -89,10 +89,13 @@ class RestoreTableOperation(operation.Operation):
                 An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
                 after this one.
         """
-        if not self.done():
+        if not self._result_set:
             raise RuntimeError("Restore Table operation incomplete")
+        elif not self._optimize_restored_table_operation:
+            return None
+        else:
+            return self._optimize_restored_table_operation.result(timeout, retry, polling)
 
-        return self._optimize_restored_table_operation.result()
 
     def set_result(self, response):
         optimize_restored_table_operation_name = (
