@@ -1,0 +1,119 @@
+# Copyright 2025 Google LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import enum
+from typing import Optional, Union
+
+from google.api_core import retry
+from google.api_core import operation_async
+from google.protobuf import empty_pb2
+
+from google.cloud.bigtable.admin_v2.types import OptimizeRestoredTableMetadata
+
+
+# This is needed due to a documentation issue with using object() as the default
+# value for a parameter.
+class Timeout(enum.Enum):
+    DEFAULT_TIMEOUT = "DEFAULT_TIMEOUT"
+
+
+class RestoreTableOperation(operation_async.AsyncOperation):
+    """A Future for interacting with Bigtable Admin's RestoreTable Long-Running Operation.
+
+    This is needed to expose a potential long-running operation that might run after this operation
+    finishes, OptimizeRestoreTable. This is exposed via the the :meth:`optimize_restore_table_operation`
+    method.
+
+    **This class should not be instantiated by users** and should only be instantiated by the admin
+    client's :meth:`restore_table
+    <google.cloud.bigtable.admin_v2.overlay.services.bigtable_table_admin.BigtableTableAdminClient.restore_table>`
+    method.
+
+    Args:
+        operations_client (google.api_core.operations_v1.AbstractOperationsClient): The operations
+            client from the admin client class's transport.
+        restore_table_operation (google.api_core.operation.Operation): A :class:`google.api_core.operation.Operation`
+            instance resembling a RestoreTable long-running operation
+    """
+
+    def __init__(self, operations_client, restore_table_operation: operation_async.AsyncOperation):
+        self._operations_client = operations_client
+        self._optimize_restored_table_operation = None
+        super().__init__(
+            restore_table_operation._operation,
+            restore_table_operation._refresh,
+            restore_table_operation._cancel,
+            restore_table_operation._result_type,
+            restore_table_operation._metadata_type,
+            polling=restore_table_operation._polling,
+        )
+
+    async def optimize_restored_table_operation(
+        self,
+    ) -> None:
+        """Gets the OptimizeRestoredTable long-running operation that runs after this operation finishes.
+
+        This is a blocking call that will return the operation after this current long-running operation
+        finishes, just like :meth:`google.api_core.operation.Operation.result`. The follow-up operation has
+        :attr:`metadata <google.api_core.operation.Operation.metadata>` type
+        :class:`OptimizeRestoredTableMetadata
+        <google.cloud.bigtable.admin_v2.types.bigtable_table_admin.OptimizeRestoredTableMetadata>`
+        and no return value, but can be waited for with `result`.
+
+        The current operation might not trigger a follow-up OptimizeRestoredTable operation, in which case, this
+        method will return `None`.
+
+        Args:
+            timeout (Optional[int | google.cloud.bigtable.admin_v2.overlay.types.restore_table.Timeout]):
+                How long (in seconds) to wait for the operation to complete. If None, wait indefinitely. If
+                `Timeout.DEFAULT_TIMEOUT`, wait the default amount.
+            retry (Optional[google.api_core.retry.Retry]): How to retry the polling RPC. This defines ONLY
+                how the polling RPC call is retried (i.e. what to do if the RPC we used for polling returned
+                an error). It does NOT define how the polling is done (i.e. how frequently and for how long
+                to call the polling RPC).
+            polling (Optional[google.api_core.retry.Retry]): How often and for how long to call polling RPC
+                periodically. This parameter does NOT define how to retry each individual polling RPC call
+                (use the `retry` parameter for that).
+
+        Returns:
+            Optional[google.api_core.operation.Operation]:
+                An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
+                after this one.
+        """
+
+        await self
+        if not self._optimize_restored_table_operation:
+            return None
+
+        return await self._optimize_restored_table_operation
+
+    def set_result(self, response):
+        optimize_restored_table_operation_name = (
+            self.metadata.optimize_table_operation_name
+        )
+
+        # When the RestoreTable operation finishes, it might not necessarily trigger
+        # an optimize operation.
+        if optimize_restored_table_operation_name:
+            optimize_restore_table_operation = self._operations_client.get_operation(
+                name=optimize_restored_table_operation_name
+            )
+            self._optimize_restored_table_operation = operation_async.from_gapic(
+                optimize_restore_table_operation,
+                self._operations_client,
+                empty_pb2.Empty,
+                metadata_type=OptimizeRestoredTableMetadata,
+            )
+
+        super().set_result(response)

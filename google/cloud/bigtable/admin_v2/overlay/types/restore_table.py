@@ -59,12 +59,7 @@ class RestoreTableOperation(operation.Operation):
             polling=restore_table_operation._polling,
         )
 
-    def optimize_restored_table_operation(
-        self,
-        timeout: Optional[Union[int, Timeout]] = Timeout.DEFAULT_TIMEOUT,
-        retry: Optional[retry.Retry] = None,
-        polling: Optional[retry.Retry] = None,
-    ) -> Optional[operation.Operation]:
+    def optimize_restored_table_operation(self) -> None:
         """Gets the OptimizeRestoredTable long-running operation that runs after this operation finishes.
 
         This is a blocking call that will return the operation after this current long-running operation
@@ -94,17 +89,10 @@ class RestoreTableOperation(operation.Operation):
                 An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
                 after this one.
         """
-        if timeout == Timeout.DEFAULT_TIMEOUT:
-            timeout = operation.Operation._DEFAULT_VALUE
+        if not self.done():
+            raise RuntimeError("Restore Table operation incomplete")
 
-        self._blocking_poll(timeout=timeout, retry=retry, polling=polling)
-
-        if self._exception is not None:
-            # pylint: disable=raising-bad-type
-            # Pylint doesn't recognize that this is valid in this case.
-            raise self._exception
-
-        return self._optimize_restored_table_operation
+        return self._optimize_restored_table_operation.result()
 
     def set_result(self, response):
         optimize_restored_table_operation_name = (
