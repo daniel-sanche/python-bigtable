@@ -59,7 +59,7 @@ class RestoreTableOperation(operation.Operation):
             polling=restore_table_operation._polling,
         )
 
-    def optimize_restored_table_operation(self, timeout, retry, polling) -> None:
+    def optimize_restored_table_operation(self) -> Optional[operation.Operation]:
         """Gets the OptimizeRestoredTable long-running operation that runs after this operation finishes.
 
         This is a blocking call that will return the operation after this current long-running operation
@@ -72,18 +72,6 @@ class RestoreTableOperation(operation.Operation):
         The current operation might not trigger a follow-up OptimizeRestoredTable operation, in which case, this
         method will return `None`.
 
-        Args:
-            timeout (Optional[int | google.cloud.bigtable.admin_v2.overlay.types.restore_table.Timeout]):
-                How long (in seconds) to wait for the operation to complete. If None, wait indefinitely. If
-                `Timeout.DEFAULT_TIMEOUT`, wait the default amount.
-            retry (Optional[google.api_core.retry.Retry]): How to retry the polling RPC. This defines ONLY
-                how the polling RPC call is retried (i.e. what to do if the RPC we used for polling returned
-                an error). It does NOT define how the polling is done (i.e. how frequently and for how long
-                to call the polling RPC).
-            polling (Optional[google.api_core.retry.Retry]): How often and for how long to call polling RPC
-                periodically. This parameter does NOT define how to retry each individual polling RPC call
-                (use the `retry` parameter for that).
-
         Returns:
             Optional[google.api_core.operation.Operation]:
                 An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
@@ -94,7 +82,7 @@ class RestoreTableOperation(operation.Operation):
         elif not self._optimize_restored_table_operation:
             return None
         else:
-            return self._optimize_restored_table_operation.result(timeout, retry, polling)
+            return self._optimize_restored_table_operation
 
 
     def set_result(self, response):
