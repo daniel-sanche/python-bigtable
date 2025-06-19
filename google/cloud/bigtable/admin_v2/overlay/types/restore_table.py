@@ -18,6 +18,7 @@ from typing import Optional, Union
 from google.api_core import retry
 from google.api_core import operation
 from google.protobuf import empty_pb2
+import concurrent.futures
 
 from google.cloud.bigtable.admin_v2.types import OptimizeRestoredTableMetadata
 
@@ -26,6 +27,7 @@ from google.cloud.bigtable.admin_v2.types import OptimizeRestoredTableMetadata
 # value for a parameter.
 class Timeout(enum.Enum):
     DEFAULT_TIMEOUT = "DEFAULT_TIMEOUT"
+
 
 
 class RestoreTableOperation(operation.Operation):
@@ -50,6 +52,8 @@ class RestoreTableOperation(operation.Operation):
     def __init__(self, operations_client, restore_table_operation: operation.Operation):
         self._operations_client = operations_client
         self._optimize_restored_table_operation = None
+        self._optimize_restored_table_future = concurrent.futures.Future()
+
         super().__init__(
             restore_table_operation._operation,
             restore_table_operation._refresh,
@@ -59,7 +63,7 @@ class RestoreTableOperation(operation.Operation):
             polling=restore_table_operation._polling,
         )
 
-    def optimize_restored_table_operation(self) -> Optional[operation.Operation]:
+    def optimize_restored_table_operation(self) -> concurrent.futures.Future:
         """Gets the OptimizeRestoredTable long-running operation that runs after this operation finishes.
 
         This is a blocking call that will return the operation after this current long-running operation
@@ -77,12 +81,7 @@ class RestoreTableOperation(operation.Operation):
                 An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
                 after this one.
         """
-        if not self._result_set:
-            raise RuntimeError("Restore Table operation incomplete")
-        elif not self._optimize_restored_table_operation:
-            return None
-        else:
-            return self._optimize_restored_table_operation
+        return self._optimize_restored_table_future
 
 
     def set_result(self, response):
@@ -102,5 +101,12 @@ class RestoreTableOperation(operation.Operation):
                 empty_pb2.Empty,
                 metadata_type=OptimizeRestoredTableMetadata,
             )
+            self._optimize_restored_table_operation.add_done_callback(self._restore_complete_callback)
 
         super().set_result(response)
+
+    def _restore_complete_callback(self, fut):
+        if fut.exception() is not None:
+            self._optimize_restored_table_future.set_exception(fut.exception())
+        else:
+            self._optimize_restored_table_future.set_result(fut.result())
