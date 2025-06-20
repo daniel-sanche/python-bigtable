@@ -65,12 +65,13 @@ class RestoreTableOperation(operation.Operation):
                 An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
                 after this one.
         Raises:
-            RuntimeError: raised when accessed before the restore_table operation is complet
+            RuntimeError: raised when accessed before the restore_table operation is complete
         """
         if not self._result_set:
-            raise RuntimeError("optimize_restored_table operation can't be accessed until the restore_table operation is complete")
+            raise RuntimeError(
+                "optimize_restored_table operation can't be accessed until the restore_table operation is complete"
+            )
         return self._optimize_restored_table_operation
-
 
     def set_result(self, response):
         optimize_restored_table_operation_name = (
