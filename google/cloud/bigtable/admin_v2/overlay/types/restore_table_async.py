@@ -15,17 +15,10 @@
 import enum
 from typing import Optional, Union
 
-from google.api_core import retry
 from google.api_core import operation_async
 from google.protobuf import empty_pb2
 
 from google.cloud.bigtable.admin_v2.types import OptimizeRestoredTableMetadata
-
-
-# This is needed due to a documentation issue with using object() as the default
-# value for a parameter.
-class Timeout(enum.Enum):
-    DEFAULT_TIMEOUT = "DEFAULT_TIMEOUT"
 
 
 class RestoreTableOperation(operation_async.AsyncOperation):
@@ -49,8 +42,8 @@ class RestoreTableOperation(operation_async.AsyncOperation):
 
     def __init__(self, operations_client, restore_table_operation: operation_async.AsyncOperation):
         self._operations_client = operations_client
-        self._optimize_restored_table_operation = None
-        self._result_set = False
+        self._optimize_restored_table_operation: Optional[operation_async.AsyncOperation] = None
+        self._is_running = True
         super().__init__(
             restore_table_operation._operation,
             restore_table_operation._refresh,
@@ -63,27 +56,21 @@ class RestoreTableOperation(operation_async.AsyncOperation):
     def optimize_restored_table_operation(self) -> Optional[operation_async.AsyncOperation]:
         """Gets the OptimizeRestoredTable long-running operation that runs after this operation finishes.
 
-        This is a blocking call that will return the operation after this current long-running operation
-        finishes, just like :meth:`google.api_core.operation.Operation.result`. The follow-up operation has
-        :attr:`metadata <google.api_core.operation.Operation.metadata>` type
-        :class:`OptimizeRestoredTableMetadata
-        <google.cloud.bigtable.admin_v2.types.bigtable_table_admin.OptimizeRestoredTableMetadata>`
-        and no return value, but can be waited for with `result`.
-
         The current operation might not trigger a follow-up OptimizeRestoredTable operation, in which case, this
         method will return `None`.
 
+        This method must not be called before the parent restore_table operation is complete.
+
         Returns:
-            Optional[google.api_core.operation.Operation]:
+            Optional[google.api_core.operation_async.AsyncOperation]:
                 An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
                 after this one.
+        Raises:
+            RuntimeError: raised when accessed before the restore_table operation is complete
         """
-        if not self._result_set:
-            raise RuntimeError("Restore Table operation incomplete")
-        elif not self._optimize_restored_table_operation:
-            return None
-        else:
-            return self._optimize_restored_table_operation.result
+        if self._is_running:
+            raise RuntimeError("optimize_restored_table operation can't be accessed until the restore_table operation is complete")
+        return self._optimize_restored_table_operation
 
     def set_result(self, response):
         optimize_restored_table_operation_name = (
@@ -103,4 +90,4 @@ class RestoreTableOperation(operation_async.AsyncOperation):
                 metadata_type=OptimizeRestoredTableMetadata,
             )
         super().set_result(response)
-        self._result_set = True
+        self._is_running = False
