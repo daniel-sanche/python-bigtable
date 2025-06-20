@@ -19,9 +19,21 @@ from google.api_core import operation_async
 from google.protobuf import empty_pb2
 
 from google.cloud.bigtable.admin_v2.types import OptimizeRestoredTableMetadata
+from google.cloud.bigtable.data._cross_sync import CrossSync
+
+if CrossSync.is_async:
+    import google.api_core.operation_async as operations
+else:
+    import google.api_core.operation as operations  # noqa: F401
+
+__CROSS_SYNC_OUTPUT__ = "google.cloud.bigtable.admin_v2.overlay.types.restore_table"
 
 
-class RestoreTableOperation(operation_async.AsyncOperation):
+@CrossSync.convert_class(
+    sync_name="RestoreTableOperation",
+    replace_symbols={"AsyncOperation": "Operation"},
+)
+class RestoreTableOperationAsync(operations.AsyncOperation):
     """A Future for interacting with Bigtable Admin's RestoreTable Long-Running Operation.
 
     This is needed to expose a potential long-running operation that might run after this operation
@@ -40,9 +52,9 @@ class RestoreTableOperation(operation_async.AsyncOperation):
             instance resembling a RestoreTable long-running operation
     """
 
-    def __init__(self, operations_client, restore_table_operation: operation_async.AsyncOperation):
+    def __init__(self, operations_client, restore_table_operation: operations.AsyncOperation):
         self._operations_client = operations_client
-        self._optimize_restored_table_operation: Optional[operation_async.AsyncOperation] = None
+        self._optimize_restored_table_operation: Optional[operations.AsyncOperation] = None
         self._is_running = True
         super().__init__(
             restore_table_operation._operation,
@@ -53,7 +65,7 @@ class RestoreTableOperation(operation_async.AsyncOperation):
             polling=restore_table_operation._polling,
         )
 
-    def optimize_restored_table_operation(self) -> Optional[operation_async.AsyncOperation]:
+    def optimize_restored_table_operation(self) -> Optional[operations.AsyncOperation]:
         """Gets the OptimizeRestoredTable long-running operation that runs after this operation finishes.
 
         The current operation might not trigger a follow-up OptimizeRestoredTable operation, in which case, this
@@ -62,8 +74,7 @@ class RestoreTableOperation(operation_async.AsyncOperation):
         This method must not be called before the parent restore_table operation is complete.
 
         Returns:
-            Optional[google.api_core.operation_async.AsyncOperation]:
-                An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
+            An object representing a long-running operation, or None if there is no OptimizeRestoredTable operation
                 after this one.
         Raises:
             RuntimeError: raised when accessed before the restore_table operation is complete
@@ -83,7 +94,7 @@ class RestoreTableOperation(operation_async.AsyncOperation):
             optimize_restore_table_operation = self._operations_client.get_operation(
                 name=optimize_restored_table_operation_name
             )
-            self._optimize_restored_table_operation = operation_async.from_gapic(
+            self._optimize_restored_table_operation = operations.from_gapic(
                 optimize_restore_table_operation,
                 self._operations_client,
                 empty_pb2.Empty,
