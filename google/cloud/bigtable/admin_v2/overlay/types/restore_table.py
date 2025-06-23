@@ -44,8 +44,6 @@ class RestoreTableOperation(operations.Operation):
         self, operations_client, restore_table_operation: operations.Operation
     ):
         self._operations_client = operations_client
-        self._optimize_restored_table_operation: Optional[operations.Operation] = None
-        self._is_running = True
         super().__init__(
             restore_table_operation._operation,
             restore_table_operation._refresh,
@@ -69,25 +67,19 @@ class RestoreTableOperation(operations.Operation):
         Raises:
             RuntimeError: raised when accessed before the restore_table operation is complete
         """
-        if self._is_running:
+        if self.done():
             raise RuntimeError(
                 "optimize_restored_table operation can't be accessed until the restore_table operation is complete"
             )
-        return self._optimize_restored_table_operation
-
-    def set_result(self, response):
-        optimize_restored_table_operation_name = (
-            self.metadata.optimize_table_operation_name
-        )
-        if optimize_restored_table_operation_name:
-            optimize_restore_table_operation = self._operations_client.get_operation(
-                name=optimize_restored_table_operation_name
-            )
-            self._optimize_restored_table_operation = operations.from_gapic(
-                optimize_restore_table_operation,
+        operation_name = self.metadata.optimize_table_operation_name
+        if operation_name:
+            gapic_operation = self._operations_client.get_operation(name=operation_name)
+            optimize_restored_table_operation = operations.from_gapic(
+                gapic_operation,
                 self._operations_client,
                 empty_pb2.Empty,
                 metadata_type=OptimizeRestoredTableMetadata,
             )
-        super().set_result(response)
-        self._is_running = False
+            return optimize_restored_table_operation
+        else:
+            return None

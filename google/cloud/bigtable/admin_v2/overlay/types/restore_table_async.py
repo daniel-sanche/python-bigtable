@@ -32,6 +32,7 @@ __CROSS_SYNC_OUTPUT__ = "google.cloud.bigtable.admin_v2.overlay.types.restore_ta
 @CrossSync.convert_class(
     sync_name="RestoreTableOperation",
     replace_symbols={"AsyncOperation": "Operation"},
+    rm_aio=True,
 )
 class RestoreTableOperationAsync(operations.AsyncOperation):
     """A Future for interacting with Bigtable Admin's RestoreTable Long-Running Operation.
@@ -54,8 +55,6 @@ class RestoreTableOperationAsync(operations.AsyncOperation):
 
     def __init__(self, operations_client, restore_table_operation: operations.AsyncOperation):
         self._operations_client = operations_client
-        self._optimize_restored_table_operation: Optional[operations.AsyncOperation] = None
-        self._is_running = True
         super().__init__(
             restore_table_operation._operation,
             restore_table_operation._refresh,
@@ -65,7 +64,7 @@ class RestoreTableOperationAsync(operations.AsyncOperation):
             polling=restore_table_operation._polling,
         )
 
-    def optimize_restored_table_operation(self) -> Optional[operations.AsyncOperation]:
+    async def optimize_restored_table_operation(self) -> Optional[operations.AsyncOperation]:
         """Gets the OptimizeRestoredTable long-running operation that runs after this operation finishes.
 
         The current operation might not trigger a follow-up OptimizeRestoredTable operation, in which case, this
@@ -79,26 +78,24 @@ class RestoreTableOperationAsync(operations.AsyncOperation):
         Raises:
             RuntimeError: raised when accessed before the restore_table operation is complete
         """
-        if self._is_running:
+        if await self.done():
             raise RuntimeError("optimize_restored_table operation can't be accessed until the restore_table operation is complete")
-        return self._optimize_restored_table_operation
-
-    def set_result(self, response):
-        optimize_restored_table_operation_name = (
-            self.metadata.optimize_table_operation_name
-        )
-
         # When the RestoreTable operation finishes, it might not necessarily trigger
         # an optimize operation.
-        if optimize_restored_table_operation_name:
-            optimize_restore_table_operation = self._operations_client.get_operation(
-                name=optimize_restored_table_operation_name
+        operation_name = (
+            self.metadata.optimize_table_operation_name
+        )
+        if operation_name:
+            gapic_operation = await self._operations_client.get_operation(
+                name=operation_name
             )
-            self._optimize_restored_table_operation = operations.from_gapic(
-                optimize_restore_table_operation,
+            optimize_restored_table_operation = operations.from_gapic(
+                gapic_operation,
                 self._operations_client,
                 empty_pb2.Empty,
                 metadata_type=OptimizeRestoredTableMetadata,
             )
-        super().set_result(response)
-        self._is_running = False
+            return optimize_restored_table_operation
+        else:
+            # no optimize operation found
+            return None
